@@ -32,4 +32,4 @@ Other `.html` files follow the same pattern of appending the file path to the ba
 
 GitHub Pages does not offer server-side rendering; hosted content is rendered entirely by the browser. This means there are practical limits to how large your `.html` files can be without causing frustrating load times. As a rough guideline, aim to keep files under **10 MB**; anything larger will likely result in long load times for users with typical connections.
 
-An interactive image width of **700 pixels** seems to work nicely with the WordPress Advanced iFrames used in Hiring Lab blog posts.
+An interactive plot width of **700 pixels** seems to work nicely with the WordPress Advanced iFrames used in Hiring Lab blog posts.
