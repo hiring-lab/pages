@@ -1,0 +1,17 @@
+<select id="country-select" onchange="switchChart()">
+  <option value="FR">France</option>
+  <option value="DE">Germany</option>
+  <option value="IT">Italy</option>
+  <option value="GB">United Kingdom</option>
+  <option value="NL">Netherlands</option>
+  <option value="IE">Ireland</option>
+  <option value="ES">Spain</option>
+</select>
+<br>
+<img id="chart" src="../en/transpa_normcat_paytype_FR.png" style="width:100%;max-width:800px">
+<script>
+function switchChart() {
+  var ctry = document.getElementById("country-select").value;
+  document.getElementById("chart").src = "../en/transpa_normcat_paytype_" + ctry + ".png";
+}
+</script>
