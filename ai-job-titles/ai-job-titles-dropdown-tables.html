@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI is reaching new job types</title>
+<style>
+  body {
+    margin: 0;
+    font-family: "Noto Sans", Arial, sans-serif;
+    color: #2d2d2d;
+  }
+  /* 700px keeps the widget aligned with the WordPress Advanced iFrame width. */
+  .widget {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 8px;
+  }
+  .controls {
+    margin: 4px 0 12px 0;
+  }
+  .controls label {
+    font-size: 14px;
+    font-weight: 700;
+    margin-right: 6px;
+  }
+  #country-select {
+    font-family: "Noto Sans", Arial, sans-serif;
+    font-size: 14px;
+    padding: 4px 6px;
+  }
+  #chart {
+    width: 100%;
+    max-width: 700px;
+    height: auto;
+    display: block;
+  }
+</style>
+</head>
+<body>
+  <div class="widget">
+    <div class="controls">
+      <label for="country-select">Country:</label>
+      <select id="country-select" onchange="switchChart()">
+        <option value="us" selected>United States</option>
+        <option value="de">Germany</option>
+        <option value="gb">United Kingdom</option>
+        <option value="fr">France</option>
+        <option value="nl">Netherlands</option>
+        <option value="es">Spain</option>
+      </select>
+    </div>
+    <img id="chart"
+         src="ai-job-titles-table-us.png"
+         alt="Largest non-tech job titles newly mentioning AI, by country">
+  </div>
+
+  <script>
+    function switchChart() {
+      var cc = document.getElementById("country-select").value;
+      var img = document.getElementById("chart");
+      img.src = "ai-job-titles-table-" + cc + ".png";
+      img.alt = "Largest non-tech job titles newly mentioning AI — " + cc.toUpperCase();
+    }
+  </script>
+</body>
+</html>
