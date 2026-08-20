@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Indeed Labor Market Tightness Index — blog visuals</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Aurora tokens — see the two chart templates for the full set. */
+  :root {
+    --font: "Noto Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --surface-1: #ffffff; --page: #FAF9F8;
+    --text-primary: #2D2D2D; --text-secondary: #424242; --text-muted: #767676;
+    --hairline: rgba(45,45,45,0.12); --tight: #2557A7; --logo: #003A9B;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--text-primary);
+    font: 400 15px/1.6 var(--font);
+  }
+  main { max-width: 780px; margin: 0 auto; padding: 40px 22px 60px; }
+  h1 { font-size: 1.4rem; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .lede { color: var(--text-secondary); margin: 0 0 30px; }
+  .card {
+    background: var(--surface-1); border: 1px solid var(--hairline);
+    border-radius: 10px; padding: 18px 20px; margin-bottom: 16px;
+  }
+  .card h2 { font-size: 1rem; margin: 0 0 4px; }
+  .card p { color: var(--text-secondary); font-size: 0.9rem; margin: 0 0 12px; }
+  a { color: var(--tight); }
+  code {
+    display: block; background: var(--page); border: 1px solid var(--hairline);
+    border-radius: 6px; padding: 10px 12px; margin-top: 10px;
+    font: 400 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--text-secondary); overflow-x: auto; white-space: pre;
+  }
+  footer { color: var(--text-muted); font-size: 0.8rem; margin-top: 30px; }
+  .brand { display: block; margin-top: 26px; }
+  .brand svg { display: block; width: 75px; height: 20px; }
+  .brand svg path { fill: var(--logo); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Indeed Labor Market Tightness Index — blog visuals</h1>
+  <p class="lede">
+    Two standalone interactive charts built from the May 2026 Indeed Labor Market
+    Tightness Index.
+    Each is a single self-contained HTML file, sized to be embedded in a post with an
+    <code style="display:inline;padding:1px 5px;border:0;background:none">&lt;iframe&gt;</code>.
+  </p>
+
+  <div class="card">
+    <h2><a href="tightness-map.html">Interactive map →</a></h2>
+    <p>Choropleth of the index by metro and micropolitan area (CBSA). Hover an area for
+       its name and index value; the state dropdown zooms the map, and the circular-arrow
+       button beside it resets to the national view (disabled until a state is picked).
+       There is no table view — the map is the whole page — but <strong>Download CSV</strong>
+       gives the full set of values.</p>
+    <p><strong>Height 890</strong> at a 779px column — the content measures 881px at
+       every state in the dropdown, so one fixed height works. (Measured at other
+       widths: use 825 at 680px, 960 at 1000px.)</p>
+    <code>&lt;iframe src="https://hiring-lab.github.io/pages/metro-tightness/tightness-map.html"
+        width="779" height="890" scrolling="no"
+        style="border:none; width:779px; height:890px;"
+        title="Labor market tightness across US metro and micropolitan areas"&gt;&lt;/iframe&gt;</code>
+  </div>
+
+  <div class="card">
+    <h2><a href="tightness-bars.html">Interactive ranking →</a></h2>
+    <p>Ranked bars against the national median. Switch between tightest markets,
+       slackest markets, and a single state; the slider sets how many areas appear. The
+       <strong>Table (all markets)</strong> view lists all 828 publishable areas —
+       searchable and sortable by rank, name or index — and is deliberately <em>not</em>
+       scoped by the chart controls, so a reader can always look up their own area. Those
+       four chart-only filters hide themselves in table view rather than sitting there
+       inert.</p>
+    <p><strong>Height 1035</strong> — the content is a constant 1027px at every slider
+       position, mode and size filter (the plot area is fixed and the bars thin out
+       instead of the chart growing). The table view is tuned to the same 1027px, so
+       switching views never moves the frame.</p>
+    <code>&lt;iframe src="https://hiring-lab.github.io/pages/metro-tightness/tightness-bars.html"
+        width="779" height="1035" scrolling="no"
+        style="border:none; width:779px; height:1035px;"
+        title="Where the labor market is tightest and slackest"&gt;&lt;/iframe&gt;</code>
+  </div>
+
+  <footer>
+    <strong>Sizing.</strong> Both pages are responsive, so a percentage width also works
+    if the embed is set to be responsive. Heights above are measured at the 779px
+    article column width in Noto Sans; a narrower frame makes the map taller, so
+    re-check if you change the width. Neither page ever changes its own height in response to a
+    control, which is what lets a single fixed height work.<br><br>
+    <strong>Auto-height (optional).</strong> Each page posts its height to the parent as
+    <code style="display:inline;padding:1px 5px;border:0;background:none">{type:"hiringlab-embed-height", id, height}</code>.
+    Nothing listens by default; add a listener in the post only if you want the frame
+    to shrink-wrap.<br><br>
+    <strong>Data download.</strong> Both pages have a <strong>Download CSV</strong> button
+    that writes all 828 publishable areas — <code style="display:inline;padding:1px 5px;border:0;background:none">rank,
+    cbsa_code, cbsa_title, states, tightness_index, large_market</code> — as
+    <code style="display:inline;padding:1px 5px;border:0;background:none">indeed-labor-market-tightness-index-may-2026.csv</code>.
+    It is always the full set, never the current view, and it carries a UTF-8 BOM so Excel
+    reads “Española, NM” correctly. Raw posting and seeker counts are not in the page
+    payload, so they cannot be exported. <em>One caveat:</em> the download is generated
+    in-page as a blob, so if the embed is given a
+    <code style="display:inline;padding:1px 5px;border:0;background:none">sandbox</code>
+    attribute it must include
+    <code style="display:inline;padding:1px 5px;border:0;background:none">allow-downloads</code>.
+    With no sandbox attribute (the default, and what the snippets above use) it just
+    works.<br><br>
+    <strong>Theme.</strong> Add
+    <code style="display:inline;padding:1px 5px;border:0;background:none">?theme=dark</code>
+    to force the dark palette or
+    <code style="display:inline;padding:1px 5px;border:0;background:none">?theme=auto</code>
+    to follow the reader's OS. Default is light, which is what a light article wants.<br><br>
+    <strong>PNG export.</strong> The camera button in each chart's toolbar is not plotly's
+    default — that one captures the plot area alone, so the file came out with no title,
+    no source line and no logo. It is replaced with one that composes the export the way
+    <code style="display:inline;padding:1px 5px;border:0;background:none">aurora_save()</code>
+    composes a PNG: title and subtitle above, source line bottom-left, Indeed logo
+    bottom-right, at the 1559&times;922 that
+    <code style="display:inline;padding:1px 5px;border:0;background:none">ggsave_aurora_blog(size&nbsp;=&nbsp;"body")</code>
+    writes. Filenames follow the current view
+    (<code style="display:inline;padding:1px 5px;border:0;background:none">indeed-tightness-index-tightest-15.png</code>,
+    <code style="display:inline;padding:1px 5px;border:0;background:none">indeed-tightness-index-map-texas.png</code>).
+    Exports are always the light palette — the logo raster is brand blue and needs a light
+    ground, and hlplot ships no white variant — so a reader in dark mode still gets a
+    light PNG.<br><br>
+    <strong>Naming.</strong> Both pages name the measure in full — <em>Indeed Labor Market
+    Tightness Index</em> — in the page title, the on-chart subtitle, the source line and
+    the CSV filename, with the short form “tightness index” used only inside tooltips and
+    column headers where the full name would crowd the layout.<br><br>
+    <strong>Styling.</strong> Both pages carry the Aurora design tokens ported from
+    <code style="display:inline;padding:1px 5px;border:0;background:none">hlplot::theme_aurora()</code>
+    — Noto Sans, Gray 100 <code style="display:inline;padding:1px 5px;border:0;background:none">#2D2D2D</code>
+    text, <code style="display:inline;padding:1px 5px;border:0;background:none">palette_aurora</code>
+    hues, no ticks, no axis titles — and the Indeed logo bottom-right, inlined from
+    <code style="display:inline;padding:1px 5px;border:0;background:none">hlplot</code>
+    at build time the way
+    <code style="display:inline;padding:1px 5px;border:0;background:none">aurora_save()</code>
+    stamps it on a PNG.<br><br>
+    Source: Indeed Hiring Lab. Rebuild with <code style="display:inline;padding:1px 5px;border:0;background:none">Rscript final-visuals.R</code>.
+  </footer>
+  <span class="brand" role="img" aria-label="Indeed"><!--__LOGO__--></span>
+</main>
+</body>
+</html>

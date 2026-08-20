@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Indeed Labor Market Tightness Index — tightest and slackest markets</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ---- design tokens ------------------------------------------------------
+     Ported from hlplot::theme_aurora() and the Aurora palettes so the HTML reads
+     as the same system as an aurora_save() PNG. Tokens match the map file. Light
+     default for embedding in a light page; ?theme=dark forces dark, ?theme=auto
+     follows OS. */
+  :root {
+    color-scheme: light;
+    /* theme_aurora(base_family = "Noto Sans") */
+    --font:           "Noto Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    /* theme_aurora() paints panel.background and plot.background white. */
+    --surface-1:      #ffffff;
+    --page:           #FAF9F8;   /* Gray 10  */
+    /* theme_aurora(base_colour = "#2D2D2D") */
+    --text-primary:   #2D2D2D;   /* Gray 100 */
+    --text-secondary: #424242;   /* Gray 90  */
+    --text-muted:     #767676;   /* Gray 70  — 4.5:1 on white */
+    --gridline:       #cccccc;   /* theme_aurora(grid_colour) */
+    /* theme_aurora draws axis.line in base_colour, not in a light grey, so the
+       axis rule and the UI control borders are two different tokens here. */
+    --axis:           #2D2D2D;
+    --baseline:       #D4D2D0;   /* Gray 40  */
+    --hairline:       rgba(45, 45, 45, 0.12);
+    --control-bg:     #ffffff;
+    --tight:          #2557A7;   /* Aurora Blue 80   */
+    --slack:          #DF7838;   /* Aurora Orange 60 */
+    --logo:           #003A9B;   /* Indeed brand blue */
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1:      #424242;   /* Gray 90  */
+    --page:           #2D2D2D;   /* Gray 100 */
+    --text-primary:   #FAF9F8;   /* Gray 10  */
+    --text-secondary: #E4E2E0;   /* Gray 30  */
+    --text-muted:     #B4B2B1;   /* Gray 50  */
+    --gridline:       #595959;   /* Gray 80  */
+    --axis:           #E4E2E0;   /* Gray 30 — the dark analogue of base_colour */
+    --baseline:       #767676;   /* Gray 70  */
+    --hairline:       rgba(250, 249, 248, 0.14);
+    --control-bg:     #2D2D2D;
+    --tight:          #6792F0;   /* Aurora Blue 60   */
+    --slack:          #EA8B58;   /* Aurora orange G70 */
+    --logo:           #ffffff;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--page, #f9f9f7);
+    font: 400 15px/1.5 var(--font);
+  }
+  .viz-root {
+    background: var(--surface-1);
+    color: var(--text-primary);
+    padding: 20px 22px 16px;
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+
+  h1 { font-size: 1.2rem; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .subtitle { color: var(--text-secondary); font-size: 0.9rem; margin: 0 0 18px; }
+
+  .controls {
+    display: flex; flex-wrap: wrap; align-items: flex-end; gap: 18px;
+    padding-bottom: 14px; margin-bottom: 6px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field[hidden] { display: none; }
+  .field label {
+    font-size: 0.7rem; font-weight: 600; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--text-muted);
+  }
+  .field label .count {
+    color: var(--text-primary); font-variant-numeric: tabular-nums;
+    margin-left: 5px; letter-spacing: 0;
+  }
+  select, input[type="search"] {
+    font: inherit; font-size: 0.9rem; color: var(--text-primary);
+    background: var(--control-bg);
+    border: 1px solid var(--baseline); border-radius: 6px;
+    padding: 7px 10px; min-height: 36px; min-width: 185px;
+  }
+  input[type="range"] {
+    width: 185px; min-height: 36px; accent-color: var(--tight); margin: 0;
+  }
+  select:focus-visible, input:focus-visible, button:focus-visible {
+    outline: 2px solid var(--tight); outline-offset: 2px;
+  }
+  .spacer { flex: 1 1 auto; }
+  .toggle { display: flex; border: 1px solid var(--baseline); border-radius: 6px; overflow: hidden; }
+  .toggle button {
+    font: inherit; font-size: 0.85rem; color: var(--text-secondary);
+    background: var(--control-bg); border: 0; padding: 8px 14px;
+    min-height: 36px; cursor: pointer;
+  }
+  .toggle button[aria-pressed="true"] { background: var(--tight); color: #fff; font-weight: 600; }
+
+  /* Download sits in the filter row so it is reachable from either view. */
+  .btn {
+    font: inherit; font-size: 0.85rem; font-weight: 600;
+    color: var(--text-primary); background: var(--control-bg);
+    border: 1px solid var(--baseline); border-radius: 6px;
+    padding: 8px 13px; min-height: 36px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--text-muted); }
+  .btn svg {
+    width: 14px; height: 14px; flex: 0 0 auto;
+    fill: none; stroke: currentColor; stroke-width: 1.9;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+
+  #plot { width: 100%; }
+  .note { color: var(--text-muted); font-size: 0.85rem; padding: 26px 2px; }
+
+  .table-wrap { display: none; margin-top: 14px; }
+  .table-wrap.on { display: block; }
+  /* Tuned so the table view is the same page height as the chart view — an embed
+     at a fixed height must not jump when the reader switches. Retune this if the
+     subtitle wraps to a different number of lines or the control row changes:
+     table view hides four filters, so its controls row is one line shorter. */
+  .table-scroll { max-height: 553px; overflow-y: auto; border: 1px solid var(--hairline); border-radius: 6px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+  thead th {
+    position: sticky; top: 0; background: var(--surface-1);
+    text-align: left; font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--text-muted); font-weight: 600; padding: 0;
+    border-bottom: 1px solid var(--baseline);
+  }
+  /* The sort control is a real button so it is focusable and announceable; the th
+     carries aria-sort, which is what a screen reader reads out. */
+  thead th button {
+    font: inherit; font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase;
+    font-weight: 600; color: inherit; background: none; border: 0; cursor: pointer;
+    padding: 9px 12px; width: 100%; text-align: inherit;
+    display: flex; align-items: center; gap: 5px;
+  }
+  thead th.num button { justify-content: flex-end; }
+  thead th button:hover { color: var(--text-primary); }
+  thead th[aria-sort] button { color: var(--text-primary); }
+  .arrow { font-size: 0.65rem; line-height: 1; opacity: 0; }
+  thead th[aria-sort] .arrow { opacity: 1; }
+  .tcaption { margin: 0 0 8px; padding-left: 2px; color: var(--text-muted); font-size: 0.8rem; }
+  .empty { padding: 18px 12px; color: var(--text-muted); font-size: 0.85rem; }
+  tbody td { padding: 7px 12px; border-bottom: 1px solid var(--gridline); color: var(--text-secondary); }
+  tbody td.metro { color: var(--text-primary); font-variant-numeric: normal; }
+  tbody td.num { text-align: right; }
+  .chip { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 7px; vertical-align: baseline; }
+
+  /* aurora_save() lays the footer out as source line bottom-left, Indeed logo
+     bottom-right. This is the HTML equivalent of that band. */
+  footer {
+    margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--hairline);
+    display: flex; align-items: flex-end; gap: 18px;
+  }
+  footer .source {
+    flex: 1 1 auto; margin: 0;
+    color: var(--text-muted); font-size: 0.75rem; line-height: 1.55;
+  }
+  .brand { flex: 0 0 auto; }
+  .brand svg { display: block; width: 75px; height: 20px; }
+  .brand svg path { fill: var(--logo); }
+  @media (max-width: 640px) {
+    .controls { gap: 12px; }
+    select, input[type="range"] { min-width: 100%; width: 100%; }
+    .field { flex: 1 1 100%; }
+    footer { flex-wrap: wrap; gap: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="viz-root">
+
+  <h1 id="title">The Indeed Labor Market Tightness Index</h1>
+  <p class="subtitle" id="subtitle"></p>
+
+  <div class="controls">
+    <div class="field" id="field-mode">
+      <label for="mode">Show</label>
+      <select id="mode">
+        <option value="tightest">Tightest markets</option>
+        <option value="slackest">Slackest markets</option>
+        <option value="state">By state</option>
+      </select>
+    </div>
+
+    <div class="field" id="field-n">
+      <label for="n">Markets shown <span class="count" id="n-out">15</span></label>
+      <input type="range" id="n" min="5" max="25" step="1" value="15">
+    </div>
+
+    <div class="field" id="field-state" hidden>
+      <label for="state">State</label>
+      <select id="state"></select>
+    </div>
+
+    <div class="field" id="field-size">
+      <label for="size">Market size</label>
+      <select id="size"></select>
+    </div>
+
+    <div class="spacer"></div>
+    <div class="field">
+      <button class="btn" id="btn-csv" type="button">
+        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M8 1.8v8.4M4.4 6.9 8 10.5l3.6-3.6M2 13.2h12"/>
+        </svg>
+        Download CSV
+      </button>
+    </div>
+    <div class="field">
+      <label id="viewlabel">View</label>
+      <div class="toggle" role="group" aria-labelledby="viewlabel">
+        <button id="btn-chart" type="button" aria-pressed="true">Chart</button>
+        <button id="btn-table" type="button" aria-pressed="false">Table (all markets)</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="plot" role="img" aria-label="Ranked bar chart of the Indeed Labor Market Tightness Index by US metro and micropolitan area. Use the table view for the underlying values."></div>
+  <div class="note" id="note" hidden></div>
+
+  <div class="table-wrap" id="table-wrap">
+    <div class="field" style="margin-bottom:10px">
+      <label for="search">Find an area</label>
+      <input type="search" id="search" placeholder="e.g. Duluth, or MN" autocomplete="off">
+    </div>
+    <p class="tcaption" id="tcaption"></p>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th class="num" id="th-rank" aria-sort="ascending">
+              <button type="button" data-key="rank">Rank<span class="arrow">▲</span></button>
+            </th>
+            <th id="th-name">
+              <button type="button" data-key="name">Metro / micropolitan area<span class="arrow">▲</span></button>
+            </th>
+            <th class="num" id="th-idx">
+              <button type="button" data-key="idx">Tightness index<span class="arrow">▲</span></button>
+            </th>
+            <th class="num" style="padding:9px 12px">vs. median</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="empty" hidden>No area matches that search.</div>
+  </div>
+
+  <footer>
+    <p class="source" id="footnote"></p>
+    <span class="brand" role="img" aria-label="Indeed"><!--__LOGO__--></span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var DATA = /*__PAYLOAD__*/;
+  var METROS = DATA.metros, STATES = DATA.states, META = DATA.meta;
+
+  var FONT = '"Noto Sans", system-ui, -apple-system, "Segoe UI", sans-serif';
+  var fmt1   = new Intl.NumberFormat("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  var signed = function (v) { return (v >= 0 ? "+" : "−") + fmt1.format(Math.abs(v)); };
+
+  // ---- theme ---------------------------------------------------------------
+  var themeParam = new URLSearchParams(location.search).get("theme");
+  function resolveTheme() {
+    if (themeParam === "dark" || themeParam === "light") return themeParam;
+    if (themeParam === "auto") {
+      return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    return "light";
+  }
+  document.documentElement.dataset.theme = resolveTheme();
+  if (themeParam === "auto") {
+    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () {
+      document.documentElement.dataset.theme = resolveTheme();
+      render();
+      renderTable();   // the chips are painted from the theme tokens
+    });
+  }
+  var css = function (name) {
+    return getComputedStyle(document.querySelector(".viz-root")).getPropertyValue(name).trim();
+  };
+
+  // ---- controls ------------------------------------------------------------
+  var modeSel  = document.getElementById("mode");
+  var nInput   = document.getElementById("n");
+  var nOut     = document.getElementById("n-out");
+  var stateSel = document.getElementById("state");
+  var sizeSel  = document.getElementById("size");
+  var fieldN    = document.getElementById("field-n");
+  var fieldSt   = document.getElementById("field-state");
+  var fieldMode = document.getElementById("field-mode");
+  var fieldSize = document.getElementById("field-size");
+
+  STATES.forEach(function (s) {
+    var o = document.createElement("option");
+    o.value = s.code;
+    o.textContent = s.name;
+    stateSel.appendChild(o);
+  });
+  stateSel.value = "TX";
+
+  // The v3 notebook reports tightest/slackest on metros with >= 10k postings and
+  // flags everything under 2k as thin, so those are the two universes offered.
+  // Default matches the notebook's published chart.
+  // Filtering is on a precomputed size tier, not a posting count: the raw counts
+  // are deliberately absent from the payload so they are not published. The
+  // thresholds themselves are methodology and stay visible.
+  // Posting thresholds define these tiers but are not shown in the control; the
+  // footnote carries the definitions so the labels stay clean.
+  var SIZES = [
+    { value: "large",     tiers: ["large"],                            label: "Large markets" },
+    { value: "published", tiers: ["large", "reliable", "published"],   label: "All publishable" }
+  ];
+  SIZES.forEach(function (s) {
+    var o = document.createElement("option");
+    o.value = s.value;
+    o.textContent = s.label;
+    sizeSel.appendChild(o);
+  });
+
+  function universe() {
+    var tiers = SIZES.find(function (s) { return s.value === sizeSel.value; }).tiers;
+    return METROS.filter(function (m) { return tiers.indexOf(m.tier) !== -1; });
+  }
+
+  // "Minneapolis-St. Paul-Bloomington, MN-WI" is unreadable as an axis tick, so
+  // long names collapse to lead city + states. The full name stays in the
+  // tooltip and the table, which is where the value lives anyway.
+  // nameMax is set per render from the measured gutter width.
+  var nameMax = 30;
+  function shortName(name) {
+    if (name.length <= nameMax) return name;
+    var comma = name.lastIndexOf(",");
+    var out = comma === -1 ? name : name.slice(0, comma).split("-")[0] + name.slice(comma);
+    return out.length <= nameMax ? out : out.slice(0, nameMax - 1) + "…";
+  }
+
+  // ---- selection -----------------------------------------------------------
+  function selection() {
+    var pool = universe(), mode = modeSel.value;
+    if (mode === "state") {
+      return pool
+        .filter(function (m) { return m.states.indexOf(stateSel.value) !== -1; })
+        .slice()
+        .sort(function (a, b) { return b.idx - a.idx; });
+    }
+    var n = +nInput.value;
+    var sorted = pool.slice().sort(function (a, b) {
+      return mode === "tightest" ? b.idx - a.idx : a.idx - b.idx;
+    });
+    // Slackest reads bottom-up like the tightest view: worst at the bottom.
+    return sorted.slice(0, n).sort(function (a, b) { return b.idx - a.idx; });
+  }
+
+  // theme_aurora(axis_titles = FALSE) hides axis titles, so the subtitle is what
+  // carries the unit. Every branch below has to name the index and its anchor.
+  function headline() {
+    var size = SIZES.find(function (s) { return s.value === sizeSel.value; });
+    var scope = size.value === "large" ? "large markets" : "all publishable markets";
+    if (modeSel.value === "state") {
+      var st = STATES.find(function (s) { return s.code === stateSel.value; });
+      return { title: "The Indeed Labor Market Tightness Index in " + st.name,
+               sub: "By metro and micropolitan area (CBSA), " + scope +
+                    ", ranked tightest to slackest. 100 = national median area." };
+    }
+    var n = +nInput.value;
+    return {
+      title: modeSel.value === "tightest"
+        ? "The " + n + " tightest metro and micropolitan labor markets"
+        : "The " + n + " slackest metro and micropolitan labor markets",
+      sub: "The Indeed Labor Market Tightness Index by metro and micropolitan area " +
+           "(CBSA), " + scope + ". 100 = national median area; 15 points is one " +
+           "standard deviation."
+    };
+  }
+
+  // ---- chart ---------------------------------------------------------------
+  var plotEl = document.getElementById("plot");
+  var noteEl = document.getElementById("note");
+
+  // Which view is showing is state, not a one-shot side effect of clicking the
+  // toggle: every later render has to honour it, or moving the slider while the
+  // table is up pops the chart back over it.
+  var tableView = false;
+
+  // Fixed plot height so the page height never changes — see render().
+  var PLOT_H = 600;
+
+  // The most recent {data, layout} render() produced.
+  var lastFig = null;
+
+  function barTrace(rows, name, color, keep) {
+    var subset = rows.filter(keep);
+    return {
+      type: "bar",
+      orientation: "h",
+      name: name,
+      // Bars grow from 100, not from zero: the index is median-anchored, so the
+      // meaningful quantity is the deviation and zero has no interpretation.
+      base: subset.map(function () { return 100; }),
+      x: subset.map(function (m) { return m.idx - 100; }),
+      y: subset.map(function (m) { return shortName(m.name); }),
+      customdata: subset.map(function (m) {
+        return [m.name, fmt1.format(m.idx), signed(m.idx - 100), m.rank];
+      }),
+      marker: { color: color, line: { width: 0 } },
+      width: 0.72,                       // leaves a surface gap between bars
+      hovertemplate:
+        "<b>%{customdata[0]}</b><br>" +
+        "Tightness index <b>%{customdata[1]}</b> (%{customdata[2]} vs. median)<br>" +
+        "National rank %{customdata[3]} of " + META.nMetros +
+        "<extra></extra>"
+    };
+  }
+
+  function render() {
+    var rows = selection();
+    var h = headline();
+    document.getElementById("title").textContent = h.title;
+    document.getElementById("subtitle").textContent = h.sub;
+
+    if (!rows.length) {
+      Plotly.purge(plotEl);
+      plotEl.style.display = "none";
+      noteEl.hidden = false;
+      noteEl.textContent = "No area in this state qualifies as a large market. " +
+        "Try “All publishable” under Market size.";
+      return;
+    }
+    noteEl.hidden = true;
+    plotEl.style.display = tableView ? "none" : "";
+    if (tableView) return;   // no point laying out a chart that is hidden
+
+    // Constant plot height, whatever the slider says. These charts are embedded
+    // in fixed-height iframes (Advanced iFrames does no cross-domain auto-sizing),
+    // so a height that grew with N would clip at the bottom or leave dead space.
+    // Bars thin out instead, and the tick font steps down as rows get tight.
+    var height = PLOT_H;
+    plotEl.style.height = height + "px";
+
+    var band = (height - 74) / rows.length;
+    var tickSize = band < 11 ? 9
+                 : band < 14 ? 10
+                 : band < 17 ? 11
+                 : band < 24 ? 13
+                 : 14;
+
+    // Long metro names have to fit the left gutter, which is narrow on a 779px
+    // embed; the gutter scales with the plot and the labels are cut to match.
+    var plotW = plotEl.getBoundingClientRect().width || 779;
+    var leftPx = Math.round(Math.min(220, Math.max(104, plotW * 0.33)));
+    nameMax = Math.max(12, Math.floor((leftPx - 12) / (tickSize * 0.58)));
+
+    var tight = barTrace(rows, "Tighter than median", css("--tight"),
+                         function (m) { return m.idx >= 100; });
+    var slack = barTrace(rows, "Slacker than median", css("--slack"),
+                         function (m) { return m.idx < 100; });
+
+    // Direct-label the extremes only. Every other value is one hover — or one
+    // click on Table — away; a number on every bar is noise.
+    var maxRow = rows[0], minRow = rows[rows.length - 1];
+    var labels = [];
+    function label(m, side) {
+      labels.push({
+        x: m.idx, y: shortName(m.name), text: fmt1.format(m.idx),
+        xanchor: side === "right" ? "left" : "right",
+        xshift: side === "right" ? 6 : -6,
+        yanchor: "middle", showarrow: false,
+        font: { size: 11, family: FONT, color: css("--text-secondary") }
+      });
+    }
+    label(maxRow, maxRow.idx >= 100 ? "right" : "left");
+    if (minRow !== maxRow) label(minRow, minRow.idx >= 100 ? "right" : "left");
+
+    // The axis must include 100. Bars are drawn from 100, so an axis starting at,
+    // say, 115 would render a 148 bar three times the length of a 123 bar when the
+    // real deviations are 48 and 23 — the classic truncated-baseline distortion.
+    var vals = rows.map(function (m) { return m.idx; });
+    var pad = Math.max(4, Math.max.apply(null, vals.map(function (v) {
+      return Math.abs(v - 100);
+    })) * 0.14);
+    var lo = Math.min.apply(null, vals.concat(100)) - pad;
+    var hi = Math.max.apply(null, vals.concat(100)) + pad;
+
+    var layout = {
+      barmode: "overlay",
+      bargap: rows.length > 24 ? 0.2 : 0.28,
+      height: height,
+      // b is tight because theme_aurora(axis_titles = FALSE) means there is no
+      // axis title under the ticks — the subtitle carries the unit instead.
+      margin: { t: 30, r: 26, b: 30, l: leftPx },
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: FONT, size: 12, color: css("--text-secondary") },
+      xaxis: {
+        range: [lo, hi],
+        zeroline: false,
+        // theme_aurora(grid = "X") for a horizontal bar chart: vertical rules
+        // only, at grid_colour. theme_aurora(axis = "x") draws the axis line in
+        // base_colour, which is why this is --axis and not --gridline.
+        gridcolor: css("--gridline"), gridwidth: 1, griddash: "solid",
+        linecolor: css("--axis"), linewidth: 1,
+        ticks: "", tickfont: { size: 11, family: FONT }, fixedrange: true
+      },
+      yaxis: {
+        categoryorder: "array",
+        categoryarray: rows.map(function (m) { return shortName(m.name); }).reverse(),
+        autorange: true,
+        showgrid: false, zeroline: false,
+        linecolor: "rgba(0,0,0,0)",
+        ticks: "", tickfont: { size: tickSize, family: FONT, color: css("--text-primary") },
+        fixedrange: true
+      },
+      shapes: [{
+        // The median is the baseline these bars grow from, so it is drawn as a
+        // solid axis rule, not a dashed threshold — in theme_aurora's axis colour
+        // (base_colour), the same weight as the x-axis line it stands in for.
+        type: "line", x0: 100, x1: 100, y0: 0, y1: 1, yref: "paper",
+        line: { color: css("--axis"), width: 1 }
+      }],
+      annotations: labels,
+      legend: {
+        // theme_aurora() puts the legend on top, horizontal, right-justified.
+        orientation: "h", y: 1.06, yanchor: "bottom", x: 1, xanchor: "right",
+        font: { size: 11, family: FONT }, itemclick: false, itemdoubleclick: false
+      },
+      // Two colours on screen need a key; one colour does not — the title and the
+      // axis already say which side of the median everything is on.
+      showlegend: tight.y.length > 0 && slack.y.length > 0,
+      hoverlabel: {
+        bgcolor: css("--surface-1"), bordercolor: css("--baseline"),
+        font: { color: css("--text-primary"), size: 14, family: FONT },
+        align: "left"
+      },
+      dragmode: false
+    };
+
+    // Kept so the PNG export can rebuild from exactly what is on screen.
+    lastFig = { data: [tight, slack], layout: layout };
+
+    Plotly.react(plotEl, [tight, slack], layout, {
+      responsive: true, displaylogo: false,
+      modeBarButtonsToRemove: ["select2d", "lasso2d", "zoom2d", "pan2d",
+                               "zoomIn2d", "zoomOut2d", "autoScale2d", "resetScale2d",
+                               "toImage"],
+      modeBarButtonsToAdd: [CAMERA_BUTTON]
+    });
+  }
+
+  // ---- table view ----------------------------------------------------------
+  // The table is the full published set, not a mirror of the chart. The chart
+  // controls answer "who is at the top"; the table answers "where does MY area
+  // sit", which needs every row, so the Show / N / state / size controls
+  // deliberately do not scope it. Search and column sort scope it instead.
+  var tbody   = document.getElementById("tbody");
+  var search  = document.getElementById("search");
+  var empty   = document.getElementById("empty");
+  var caption = document.getElementById("tcaption");
+
+  // Rank ascending is tightest-first, which is the chart's default reading order.
+  var sortKey = "rank", sortDir = 1;
+  var TH = { rank: document.getElementById("th-rank"),
+             name: document.getElementById("th-name"),
+             idx:  document.getElementById("th-idx") };
+
+  function renderTable() {
+    var q = search.value.trim();
+    var needle = q.toLowerCase();
+    // Matching the whole title also matches the trailing state codes, so "MN"
+    // works as a state filter without a second control.
+    var rows = METROS.filter(function (m) {
+      return !needle || m.name.toLowerCase().indexOf(needle) !== -1;
+    });
+    rows.sort(function (a, b) {
+      if (sortKey === "name") return sortDir * a.name.localeCompare(b.name);
+      if (sortKey === "idx")  return sortDir * (a.idx - b.idx);
+      return sortDir * (a.rank - b.rank);
+    });
+
+    Object.keys(TH).forEach(function (k) {
+      if (k === sortKey) {
+        TH[k].setAttribute("aria-sort", sortDir === 1 ? "ascending" : "descending");
+        TH[k].querySelector(".arrow").textContent = sortDir === 1 ? "▲" : "▼";
+      } else {
+        TH[k].removeAttribute("aria-sort");
+      }
+    });
+
+    caption.textContent = q
+      ? rows.length + (rows.length === 1 ? " area" : " areas") +
+        " matching “" + q + "” of " + META.nMetros
+      : "The Indeed Labor Market Tightness Index for all " + META.nMetros +
+        " publishable metro and micropolitan areas — sortable, searchable, " +
+        "and downloadable as CSV.";
+
+    tbody.replaceChildren();
+    var frag = document.createDocumentFragment();
+    rows.forEach(function (m) {
+      var tr = document.createElement("tr");
+      function cell(text, cls) {
+        var td = document.createElement("td");
+        if (cls) td.className = cls;
+        td.textContent = text;
+        return td;
+      }
+      tr.appendChild(cell(m.rank, "num"));
+
+      var td = document.createElement("td");
+      td.className = "metro";
+      var chip = document.createElement("span");
+      chip.className = "chip";
+      chip.style.background = m.idx >= 100 ? css("--tight") : css("--slack");
+      td.appendChild(chip);
+      td.appendChild(document.createTextNode(m.name));
+      tr.appendChild(td);
+
+      tr.appendChild(cell(fmt1.format(m.idx), "num"));
+      tr.appendChild(cell(signed(m.idx - 100), "num"));
+      frag.appendChild(tr);
+    });
+    tbody.appendChild(frag);
+    empty.hidden = rows.length > 0;
+  }
+
+  Object.keys(TH).forEach(function (k) {
+    TH[k].querySelector("button").addEventListener("click", function () {
+      // Re-clicking the active column flips it; a new column starts in the
+      // direction that reads as "best first" for that column.
+      if (sortKey === k) sortDir = -sortDir;
+      else { sortKey = k; sortDir = k === "idx" ? -1 : 1; }
+      renderTable();
+    });
+  });
+  search.addEventListener("input", renderTable);
+
+  // ---- wiring --------------------------------------------------------------
+  // Chart-only controls. In table view they are hidden outright rather than
+  // greyed: the table is the full published set and none of these four scope it,
+  // so leaving them on screen over it is a false affordance — the reader would
+  // move the slider and watch nothing happen. Download CSV and the view toggle
+  // stay, because both mean the same thing in either view.
+  function syncControls() {
+    var byState = modeSel.value === "state";
+    fieldMode.hidden = tableView;
+    fieldSize.hidden = tableView;
+    fieldN.hidden  = tableView || byState;   // the slider only means something for a top-N cut
+    fieldSt.hidden = tableView || !byState;  // and the state picker only for the by-state cut
+  }
+  modeSel.addEventListener("change", function () { syncControls(); render(); });
+  nInput.addEventListener("input", function () {
+    nOut.textContent = nInput.value;
+    render();
+  });
+  stateSel.addEventListener("change", render);
+  sizeSel.addEventListener("change", render);
+
+  var btnChart = document.getElementById("btn-chart");
+  var btnTable = document.getElementById("btn-table");
+  var wrap     = document.getElementById("table-wrap");
+  function setView(showTable) {
+    tableView = showTable;
+    btnChart.setAttribute("aria-pressed", String(!showTable));
+    btnTable.setAttribute("aria-pressed", String(showTable));
+    wrap.classList.toggle("on", showTable);
+    syncControls();   // the chart-only filters come and go with the view
+    if (showTable) {
+      plotEl.style.display = "none";
+    } else {
+      // Re-render: while the table was up, control changes deliberately skipped
+      // laying out the chart, so it may be stale.
+      render();
+      Plotly.Plots.resize(plotEl);
+    }
+  }
+  btnChart.addEventListener("click", function () { setView(false); });
+  btnTable.addEventListener("click", function () { setView(true); });
+
+  // Single source for the string the footer and the PNG export both use.
+  function SOURCE_TEXT() {
+    return "Source: Indeed Hiring Lab. Indeed Labor Market Tightness Index, " +
+      META.period + ". " +
+      "Computed across " + META.nMetros + " US metro and micropolitan " +
+      "areas (CBSAs) from seekers per posting, per-seeker engagement intensity, " +
+      "employer paid effort, and market concentration. Median-anchored: 100 is the " +
+      "median area and 15 points is one standard deviation. Higher reads tighter. Bars " +
+      "are drawn from 100 because the index has no meaningful zero. " +
+      "“Large markets” are the " + META.nLarge + " highest-volume areas; " +
+      "“all publishable” is the full set of " + META.nMetros + ". " +
+      META.nExcluded + " of the " + META.nScored + " scored areas are withheld for " +
+      "having a low posting volume, at which the estimate reflects the national " +
+      "median more than the area itself.";
+  }
+  document.getElementById("footnote").textContent = SOURCE_TEXT();
+
+  // Tell a parent page how tall we are. Advanced iFrames does not auto-size
+  // cross-domain embeds, so the documented fixed height is the default path and
+  // this is only useful if a listener is added on the WordPress side. It is a
+  // no-op otherwise.
+  function postHeight() {
+    try {
+      parent.postMessage({ type: "hiringlab-embed-height",
+                           id: "tightness-bars",
+                           height: document.documentElement.scrollHeight }, "*");
+    } catch (e) { /* sandboxed or no parent — nothing to do */ }
+  }
+  addEventListener("load", postHeight);
+  addEventListener("resize", postHeight);
+  ["mode", "n", "state", "size"].forEach(function (id) {
+    document.getElementById(id).addEventListener("change", postHeight);
+  });
+  btnChart.addEventListener("click", postHeight);
+  btnTable.addEventListener("click", postHeight);
+
+  // ---- branded PNG export --------------------------------------------------
+  // Plotly's own camera button captures the plot area and nothing else, so the
+  // file lands with no title, no source line and no logo — the chart arrives in
+  // someone's deck unattributed. Replacing the button lets the export be composed
+  // the way aurora_save() composes a PNG: title and subtitle above, source line
+  // bottom-left, Indeed logo bottom-right, at the 1559x922 that
+  // ggsave_aurora_blog(size = "body") writes.
+  //
+  // Plotly.downloadImage accepts a figure object as well as a graph div, so the
+  // export layout is a throwaway copy and the on-screen chart is never touched.
+  var EXPORT_W = 1559, EXPORT_H = 922;   // ggsave_aurora_blog(size = "body")
+  var LOGO_PNG = /*__LOGOPNG__*/;
+  var LOGO_W = 118, LOGO_H = 32;         // 1441x385 source, aspect preserved
+
+  // The export is always the light palette. The PNG is an artifact for documents
+  // and decks, and hlplot's logo raster is brand blue, which needs a light ground
+  // — there is no white variant in the package to swap in for a dark export.
+  function withLightTheme(fn) {
+    var prev = document.documentElement.dataset.theme;
+    document.documentElement.dataset.theme = "light";
+    try { return fn(); } finally { document.documentElement.dataset.theme = prev; }
+  }
+
+  // Plotly annotations do not wrap, so the source line has to arrive pre-broken.
+  // 0.52em is a serviceable mean advance width for Noto Sans at these sizes.
+  function wrapText(text, px, fontSize) {
+    var maxChars = Math.max(20, Math.floor(px / (fontSize * 0.52)));
+    var out = [], cur = "";
+    text.split(" ").forEach(function (w) {
+      if (!cur) { cur = w; }
+      else if ((cur + " " + w).length <= maxChars) { cur += " " + w; }
+      else { out.push(cur); cur = w; }
+    });
+    if (cur) out.push(cur);
+    return out.join("<br>");
+  }
+
+  // Title/subtitle above the plot, source line and logo below it. Annotations take
+  // xshift/yshift so they can be placed in pixels; layout.images cannot, so the
+  // logo is positioned in paper units computed from the margin box.
+  function brandLayout(lay, titleText, subText, sourceText) {
+    lay.margin = { t: 138, r: 28, b: 132, l: lay.margin.l };
+    lay.paper_bgcolor = "#ffffff";
+    lay.plot_bgcolor  = "#ffffff";
+    lay.width = EXPORT_W;
+    lay.height = EXPORT_H;
+    var plotW = EXPORT_W - lay.margin.l - lay.margin.r;
+    var plotH = EXPORT_H - lay.margin.t - lay.margin.b;
+
+    // theme_aurora() sets plot_title_position = "plot": the title hangs off the
+    // left edge of the image, not the left edge of the panel. x:0 with xref
+    // "paper" is the panel edge, which on the bar chart sits ~210px in behind the
+    // name gutter, so shift back out to a flat PAD from the image edge. The logo
+    // is right-anchored at the panel edge, which the right margin already puts
+    // at the same PAD, so the two ends line up.
+    var PAD = 28;
+    var edge = PAD - lay.margin.l;
+    var textW = EXPORT_W - PAD * 2;
+
+    lay.annotations = (lay.annotations || []).concat([
+      { text: "<b>" + titleText + "</b>",
+        xref: "paper", yref: "paper", x: 0, y: 1,
+        xanchor: "left", yanchor: "bottom", xshift: edge, yshift: 84,
+        showarrow: false, align: "left",
+        font: { family: FONT, size: 27, color: "#2D2D2D" } },
+      { text: wrapText(subText, textW, 16),
+        xref: "paper", yref: "paper", x: 0, y: 1,
+        xanchor: "left", yanchor: "bottom", xshift: edge, yshift: 22,
+        showarrow: false, align: "left",
+        font: { family: FONT, size: 16, color: "#424242" } },
+      { text: wrapText(sourceText, textW - LOGO_W - 28, 12),
+        xref: "paper", yref: "paper", x: 0, y: 0,
+        xanchor: "left", yanchor: "top", xshift: edge, yshift: -52,
+        showarrow: false, align: "left",
+        font: { family: FONT, size: 12, color: "#767676" } }
+    ]);
+
+    lay.images = [{
+      source: LOGO_PNG, xref: "paper", yref: "paper",
+      x: 1, y: -52 / plotH, xanchor: "right", yanchor: "top",
+      sizex: LOGO_W / plotW, sizey: LOGO_H / plotH,
+      sizing: "contain", layer: "above"
+    }];
+    return lay;
+  }
+
+  function downloadBrandedPng() {
+    var fig = withLightTheme(exportFigure);
+    Plotly.downloadImage(fig, {
+      format: "png", width: EXPORT_W, height: EXPORT_H, scale: 1,
+      filename: EXPORT_NAME()
+    });
+  }
+
+  var CAMERA_BUTTON = {
+    name: "downloadBrandedPng",
+    title: "Download plot as a PNG",
+    icon: Plotly.Icons.camera,
+    click: downloadBrandedPng
+  };
+
+  // Unlike the map, the bar chart builds its layout inside render() from live CSS
+  // variables, so the light-theme figure is obtained by re-running render() under
+  // the forced theme and then again to restore. Both calls are synchronous within
+  // one event handler, so the browser paints only the final state — no flicker.
+  function exportFigure() {
+    render();
+    var fig = JSON.parse(JSON.stringify(lastFig));
+    var h = headline();
+    return { data: fig.data,
+             layout: brandLayout(fig.layout, h.title, h.sub, SOURCE_TEXT()) };
+  }
+  function EXPORT_NAME() {
+    var mode = modeSel.value;
+    return "indeed-tightness-index-" +
+      (mode === "state"
+        ? stateSel.value.toLowerCase()
+        : mode + "-" + nInput.value);
+  }
+
+  // ---- CSV export ----------------------------------------------------------
+  // The download is the full published set every time, not the current view: a
+  // file that silently contained only the top 15 would be a trap. Columns are
+  // limited to what already ships in the payload — raw posting and seeker counts
+  // are deliberately absent from it, so they cannot be exported either. The size
+  // flag is the 10k "large markets" cut, which the source line already discloses;
+  // the finer tiers are not exported because their thresholds are not published.
+  function csvCell(v) {
+    var s = String(v);
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function buildCsv() {
+    var rows = [["rank", "cbsa_code", "cbsa_title", "states", "tightness_index",
+                 "large_market"].join(",")];
+    METROS.slice()
+      .sort(function (a, b) { return a.rank - b.rank; })
+      .forEach(function (m) {
+        rows.push([m.rank, m.code, csvCell(m.name), csvCell(m.states.join(";")),
+                   m.idx.toFixed(1), m.tier === "large" ? "TRUE" : "FALSE"].join(","));
+      });
+    return rows.join("\r\n") + "\r\n";   // RFC 4180
+  }
+  document.getElementById("btn-csv").addEventListener("click", function () {
+    // The BOM is not optional: without it Excel decodes the file as ANSI and
+    // "Española, NM" and "Cañon City, CO" come back mojibake.
+    var blob = new Blob(["\ufeff" + buildCsv()], { type: "text/csv;charset=utf-8" });
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement("a");
+    a.href = url;
+    a.download = "indeed-labor-market-tightness-index-" +
+                 META.period.toLowerCase().replace(/\s+/g, "-") + ".csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  syncControls();
+  render();
+  renderTable();
+  postHeight();
+})();
+</script>
+</body>
+</html>

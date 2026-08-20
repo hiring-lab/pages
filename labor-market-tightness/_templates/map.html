@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Indeed Labor Market Tightness Index — US metro and micropolitan areas</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ---- design tokens ------------------------------------------------------
+     Light is the default because this is embedded in a light blog page.
+     ?theme=dark forces dark; ?theme=auto follows the reader's OS setting.
+     Dark is a selected set of steps, not an automatic flip of the light one. */
+  :root {
+    color-scheme: light;
+    /* theme_aurora(base_family = "Noto Sans") */
+    --font:           "Noto Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    /* theme_aurora() paints panel.background and plot.background white. */
+    --surface-1:      #ffffff;
+    --page:           #FAF9F8;   /* Gray 10  */
+    /* theme_aurora(base_colour = "#2D2D2D") */
+    --text-primary:   #2D2D2D;   /* Gray 100 */
+    --text-secondary: #424242;   /* Gray 90  */
+    --text-muted:     #767676;   /* Gray 70  — 4.5:1 on white */
+    --gridline:       #cccccc;   /* theme_aurora(grid_colour) */
+    /* theme_aurora draws axis.line in base_colour, not in a light grey, so the
+       axis rule and the UI control borders are two different tokens here. */
+    --axis:           #2D2D2D;
+    --baseline:       #D4D2D0;   /* Gray 40  */
+    --hairline:       rgba(45, 45, 45, 0.12);
+    --control-bg:     #ffffff;
+    /* No-data land must not collide with the diverging ramp's neutral midpoint
+       (Gray 20 #F3F2F1), or an area sitting at the median is indistinguishable
+       from territory that has no area at all. Gray 40 is ~11 OKLCH-L below the
+       midpoint — separable at a glance — while still receding from the surface. */
+    --geo-land:       #D4D2D0;   /* Gray 40 */
+    --geo-border:     #767676;   /* Gray 70 */
+    --tight:          #2557A7;   /* Aurora Blue 80   */
+    --slack:          #DF7838;   /* Aurora Orange 60 */
+    --logo:           #003A9B;   /* Indeed brand blue */
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1:      #424242;   /* Gray 90  */
+    --page:           #2D2D2D;   /* Gray 100 */
+    --text-primary:   #FAF9F8;   /* Gray 10  */
+    --text-secondary: #E4E2E0;   /* Gray 30  */
+    --text-muted:     #B4B2B1;   /* Gray 50  */
+    --gridline:       #595959;   /* Gray 80  */
+    --axis:           #E4E2E0;   /* Gray 30 — the dark analogue of base_colour */
+    --baseline:       #767676;   /* Gray 70  */
+    --hairline:       rgba(250, 249, 248, 0.14);
+    --control-bg:     #2D2D2D;
+    /* Dark keeps the same separation, resolved the other way: no-data land goes
+       below the surface while the ramp midpoint (Gray 80) stays above it. */
+    --geo-land:       #2D2D2D;   /* Gray 100 */
+    --geo-border:     #949494;   /* Gray 60  */
+    --tight:          #6792F0;   /* Aurora Blue 60   */
+    --slack:          #EA8B58;   /* Aurora orange G70 */
+    --logo:           #ffffff;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--page, #f9f9f7);
+    font: 400 15px/1.5 var(--font);
+  }
+  .viz-root {
+    background: var(--surface-1);
+    color: var(--text-primary);
+    padding: 20px 22px 16px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  h1 { font-size: 1.2rem; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .subtitle { color: var(--text-secondary); font-size: 0.9rem; margin: 0 0 18px; }
+
+  /* ---- filter row: one row, above everything it scopes -------------------- */
+  .controls {
+    display: flex; flex-wrap: wrap; align-items: flex-end; gap: 18px;
+    padding-bottom: 14px; margin-bottom: 6px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label {
+    font-size: 0.7rem; font-weight: 600; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--text-muted);
+  }
+  select, input[type="search"] {
+    font: inherit; font-size: 0.9rem; color: var(--text-primary);
+    background: var(--control-bg);
+    border: 1px solid var(--baseline); border-radius: 6px;
+    padding: 7px 10px; min-height: 36px; min-width: 220px;
+  }
+  select:focus-visible, input:focus-visible, button:focus-visible {
+    outline: 2px solid var(--tight); outline-offset: 2px;
+  }
+  .spacer { flex: 1 1 auto; }
+  /* The map has no view toggle: the choropleth is the whole view. The full table
+     lives on the ranking page; this page offers the same data as a CSV. */
+  /* Download sits in the filter row so it is reachable from either view. */
+  .btn {
+    font: inherit; font-size: 0.85rem; font-weight: 600;
+    color: var(--text-primary); background: var(--control-bg);
+    border: 1px solid var(--baseline); border-radius: 6px;
+    padding: 8px 13px; min-height: 36px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--text-muted); }
+  /* Reset is disabled at the national view rather than hidden, so the control row
+     keeps its width and nothing shifts when a state is picked. */
+  .btn:disabled { opacity: 0.4; cursor: default; }
+  .btn.icon { padding: 8px 10px; }
+  .btn svg {
+    width: 14px; height: 14px; flex: 0 0 auto;
+    fill: none; stroke: currentColor; stroke-width: 1.9;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+
+  /* Height is set from the width in JS — see fitPlotHeight(). */
+  #plot { width: 100%; height: 620px; }
+
+  /* Key for the one thing the colourbar cannot say: which areas have no value. */
+  .mapkey {
+    display: flex; align-items: center; gap: 8px;
+    margin: 2px 0 0; padding-left: 4px;
+    color: var(--text-secondary); font-size: 0.8rem;
+  }
+  /* An explicit display value beats the [hidden] attribute, so restate it. */
+  .mapkey[hidden] { display: none; }
+  .key-swatch {
+    width: 22px; height: 12px; border-radius: 2px;
+    background: var(--geo-land);
+    border: 1px solid var(--geo-border);
+  }
+
+  /* aurora_save() lays the footer out as source line bottom-left, Indeed logo
+     bottom-right. This is the HTML equivalent of that band. */
+  footer {
+    margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--hairline);
+    display: flex; align-items: flex-end; gap: 18px;
+  }
+  footer .source {
+    flex: 1 1 auto; margin: 0;
+    color: var(--text-muted); font-size: 0.75rem; line-height: 1.55;
+  }
+  .brand { flex: 0 0 auto; }
+  .brand svg { display: block; width: 75px; height: 20px; }
+  .brand svg path { fill: var(--logo); }
+  @media (max-width: 640px) {
+    .controls { gap: 12px; }
+    select, input[type="search"] { min-width: 100%; }
+    .field { flex: 1 1 100%; }
+    #plot { height: 460px; }
+    footer { flex-wrap: wrap; gap: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="viz-root">
+
+  <h1>The Indeed Labor Market Tightness Index across US metro and micropolitan areas</h1>
+  <p class="subtitle">
+    By metro and micropolitan area (CBSA), May 2026. 100 = national median area;
+    <strong>blue reads tighter</strong>, <strong>orange reads slacker</strong>.
+    Hover an area for its name and index value, or zoom to a single state.
+  </p>
+
+  <div class="controls">
+    <div class="field">
+      <label for="state">Zoom to state</label>
+      <select id="state"><option value="">All areas (United States)</option></select>
+    </div>
+    <div class="field">
+      <button class="btn icon" id="btn-reset" type="button" disabled
+              title="Reset to the national view" aria-label="Reset to the national view">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <polyline points="1 4 1 10 7 10"/>
+          <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+        </svg>
+      </button>
+    </div>
+    <div class="spacer"></div>
+    <div class="field">
+      <button class="btn" id="btn-csv" type="button">
+        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M8 1.8v8.4M4.4 6.9 8 10.5l3.6-3.6M2 13.2h12"/>
+        </svg>
+        Download CSV
+      </button>
+    </div>
+  </div>
+
+  <div id="plot" role="img" aria-label="Choropleth map of the Indeed Labor Market Tightness Index by US metro and micropolitan area. Hover an area for its index value."></div>
+  <p class="mapkey" id="mapkey">
+    <span class="key-swatch" aria-hidden="true"></span>
+    <span>Not part of a published metro or micropolitan area — no index value</span>
+  </p>
+
+  <footer>
+    <p class="source" id="footnote"></p>
+    <span class="brand" role="img" aria-label="Indeed"><!--__LOGO__--></span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var DATA    = /*__PAYLOAD__*/;
+  var GEOJSON = /*__GEOJSON__*/;
+  var BORDERS = /*__BORDERS__*/;
+
+  var METROS = DATA.metros, STATES = DATA.states, META = DATA.meta;
+  var LO = 100 - META.span, HI = 100 + META.span;
+
+  // ---- theme --------------------------------------------------------------
+  var themeParam = new URLSearchParams(location.search).get("theme");
+  function resolveTheme() {
+    if (themeParam === "dark" || themeParam === "light") return themeParam;
+    if (themeParam === "auto") {
+      return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    return "light";
+  }
+  function applyTheme() { document.documentElement.dataset.theme = resolveTheme(); }
+  applyTheme();
+  if (themeParam === "auto") {
+    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () {
+      applyTheme(); draw();
+    });
+  }
+  var css = function (name) {
+    return getComputedStyle(document.querySelector(".viz-root")).getPropertyValue(name).trim();
+  };
+
+  // ---- diverging ramp ------------------------------------------------------
+  // Aurora's own two opposed hues (palette_expressive "orange" / "blue", n = 13)
+  // with a neutral Aurora grey at the national median. Equal steps per arm,
+  // monotone lightness. Dark is the same arms with the anchor flipped, so the
+  // midpoint recedes into the dark surface exactly as it recedes into the light one.
+  var RAMP_LIGHT = ["#462615", "#753F20", "#B4602B", "#EA8B58", "#F7C8B8", "#FBE6DF",
+                    "#F3F2F1",
+                    "#E5E9FE", "#C7D2F6", "#83A1F0", "#3F73D3", "#1D4B94", "#0D2D5E"];
+  var RAMP_DARK  = ["#FBE6DF", "#F7C8B8", "#EA8B58", "#B4602B", "#753F20", "#462615",
+                    "#595959",
+                    "#0D2D5E", "#1D4B94", "#3F73D3", "#83A1F0", "#C7D2F6", "#E5E9FE"];
+  function colorscale() {
+    var ramp = resolveTheme() === "dark" ? RAMP_DARK : RAMP_LIGHT;
+    return ramp.map(function (hex, i) { return [i / (ramp.length - 1), hex]; });
+  }
+
+  var FONT = '"Noto Sans", system-ui, -apple-system, "Segoe UI", sans-serif';
+
+  // ---- state dropdown ------------------------------------------------------
+  var stateSel = document.getElementById("state");
+  STATES.forEach(function (s) {
+    var o = document.createElement("option");
+    o.value = s.code;
+    o.textContent = s.name;          // untrusted label -> textContent, never innerHTML
+    stateSel.appendChild(o);
+  });
+
+  // ---- map -----------------------------------------------------------------
+  // The national view uses albers-usa, which insets Alaska and Hawaii beneath the
+  // lower 48. A state view can't use that composite projection — its insets are
+  // baked in — so zooming switches to mercator.
+  //
+  // Zooming is done with center + projection.scale rather than the more obvious
+  // lonaxis/lataxis ranges: plotly honours those ranges when sizing the frame but
+  // still clips the drawing to a narrower window, which slices border metros in
+  // half. center + scale has no such gap.
+  var mercY    = function (lat) { return Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)) * 180 / Math.PI; };
+  var invMercY = function (y)   { return (2 * Math.atan(Math.exp(y * Math.PI / 180)) - Math.PI / 2) * 180 / Math.PI; };
+
+  function geoLayout(code) {
+    var base = {
+      bgcolor: "rgba(0,0,0,0)",
+      showland: true,  landcolor: css("--geo-land"),
+      showlakes: false, showframe: false, showcoastlines: false,
+      // Base-layer subunits sit *under* the choropleth; the scattergeo border
+      // trace is what the reader actually sees. These keep the un-metroed parts
+      // of the map consistent with it.
+      showsubunits: true, subunitcolor: css("--geo-border"), subunitwidth: 0.8,
+      showcountries: true, countrycolor: css("--geo-border"), countrywidth: 0.8
+    };
+    if (!code) {
+      base.scope = "usa";
+      base.projection = { type: "albers usa" };
+      return base;
+    }
+    var s = STATES.find(function (x) { return x.code === code; });
+
+    // Plotly sizes a geo subplot's drawing box from the projection's *default*
+    // world extent, not from the zoomed view, and clips to that box. Mercator's
+    // world is square, so the box is square whatever the container's aspect —
+    // which means the binding dimension is simply the larger of the two spans,
+    // with no container-aspect term. Mercator is conformal, so a degree of
+    // longitude and a degree of mercator-y are worth the same number of pixels
+    // and the two spans are directly comparable.
+    var y0 = mercY(Math.max(-84, s.lat[0]));
+    var y1 = mercY(Math.min(84, s.lat[1]));
+    var span = Math.max(s.lon[1] - s.lon[0], y1 - y0);
+
+    // The stored window already carries 8% padding; 0.95 keeps the state off the
+    // edge of the box even where that padding rounds thin.
+    base.projection = { type: "mercator", scale: (360 / span) * 0.95 };
+    base.center = { lon: (s.lon[0] + s.lon[1]) / 2, lat: invMercY((y0 + y1) / 2) };
+    return base;
+  }
+
+  // Drawn after the choropleth so state lines stay legible over the fills.
+  function borderTrace() {
+    return {
+      type: "scattergeo", mode: "lines",
+      lon: BORDERS.lon, lat: BORDERS.lat,
+      line: { color: css("--geo-border"), width: 0.8 },
+      hoverinfo: "skip", showlegend: false
+    };
+  }
+
+  function trace() {
+    return {
+      type: "choropleth",
+      geojson: GEOJSON,
+      featureidkey: "id",
+      locations: METROS.map(function (m) { return m.code; }),
+      z:         METROS.map(function (m) { return m.idx; }),
+      customdata: METROS.map(function (m) { return [m.name, m.rank]; }),
+      zmin: LO, zmax: HI,
+      colorscale: colorscale(),
+      // A hairline in the surface colour is the choropleth's version of the 2px
+      // gap between fills — a separator, not a border drawn around each mark.
+      marker: { line: { color: css("--surface-1"), width: 0.4 } },
+      hovertemplate:
+        "<b>%{customdata[0]}</b><br>" +
+        "Tightness index <b>%{z:.1f}</b>  (100 = national median area)<br>" +
+        "Rank %{customdata[1]} of " + META.nMetros +
+        "<extra></extra>",
+      colorbar: {
+        title: { text: "Tightness<br>index", side: "top",
+                 font: { size: 11, family: FONT, color: css("--text-primary") } },
+        thickness: 12, len: 0.62, x: 1.0, xpad: 0, y: 0.5,
+        outlinewidth: 0, ticklen: 0, tickcolor: "rgba(0,0,0,0)",
+        tickvals: [LO, 80, 90, 100, 110, 120, HI],
+        // The domain is symmetric about 100, so the tails clamp. Say so on the
+        // scale rather than letting the extremes read as exact values.
+        ticktext: ["≤" + LO, "80", "90", "100", "110", "120", "≥" + HI],
+        tickfont: { size: 11, family: FONT, color: css("--text-secondary") }
+      }
+    };
+  }
+
+  function layout() {
+    return {
+      geo: geoLayout(stateSel.value),
+      margin: { t: 6, r: 4, b: 6, l: 4 },
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: FONT, size: 12, color: css("--text-secondary") },
+      hoverlabel: {
+        bgcolor: css("--surface-1"), bordercolor: css("--baseline"),
+        font: { color: css("--text-primary"), size: 12, family: FONT },
+        align: "left"
+      },
+      dragmode: false
+    };
+  }
+
+  // ---- branded PNG export --------------------------------------------------
+  // Plotly's own camera button captures the plot area and nothing else, so the
+  // file lands with no title, no source line and no logo — the chart arrives in
+  // someone's deck unattributed. Replacing the button lets the export be composed
+  // the way aurora_save() composes a PNG: title and subtitle above, source line
+  // bottom-left, Indeed logo bottom-right, at the 1559x922 that
+  // ggsave_aurora_blog(size = "body") writes.
+  //
+  // Plotly.downloadImage accepts a figure object as well as a graph div, so the
+  // export layout is a throwaway copy and the on-screen chart is never touched.
+  var EXPORT_W = 1559, EXPORT_H = 922;   // ggsave_aurora_blog(size = "body")
+  var LOGO_PNG = /*__LOGOPNG__*/;
+  var LOGO_W = 118, LOGO_H = 32;         // 1441x385 source, aspect preserved
+
+  // The export is always the light palette. The PNG is an artifact for documents
+  // and decks, and hlplot's logo raster is brand blue, which needs a light ground
+  // — there is no white variant in the package to swap in for a dark export.
+  function withLightTheme(fn) {
+    var prev = document.documentElement.dataset.theme;
+    document.documentElement.dataset.theme = "light";
+    try { return fn(); } finally { document.documentElement.dataset.theme = prev; }
+  }
+
+  // Plotly annotations do not wrap, so the source line has to arrive pre-broken.
+  // 0.52em is a serviceable mean advance width for Noto Sans at these sizes.
+  function wrapText(text, px, fontSize) {
+    var maxChars = Math.max(20, Math.floor(px / (fontSize * 0.52)));
+    var out = [], cur = "";
+    text.split(" ").forEach(function (w) {
+      if (!cur) { cur = w; }
+      else if ((cur + " " + w).length <= maxChars) { cur += " " + w; }
+      else { out.push(cur); cur = w; }
+    });
+    if (cur) out.push(cur);
+    return out.join("<br>");
+  }
+
+  // Title/subtitle above the plot, source line and logo below it. Annotations take
+  // xshift/yshift so they can be placed in pixels; layout.images cannot, so the
+  // logo is positioned in paper units computed from the margin box.
+  function brandLayout(lay, titleText, subText, sourceText) {
+    lay.margin = { t: 138, r: 28, b: 132, l: lay.margin.l };
+    lay.paper_bgcolor = "#ffffff";
+    lay.plot_bgcolor  = "#ffffff";
+    lay.width = EXPORT_W;
+    lay.height = EXPORT_H;
+    var plotW = EXPORT_W - lay.margin.l - lay.margin.r;
+    var plotH = EXPORT_H - lay.margin.t - lay.margin.b;
+
+    // theme_aurora() sets plot_title_position = "plot": the title hangs off the
+    // left edge of the image, not the left edge of the panel. x:0 with xref
+    // "paper" is the panel edge, which on the bar chart sits ~210px in behind the
+    // name gutter, so shift back out to a flat PAD from the image edge. The logo
+    // is right-anchored at the panel edge, which the right margin already puts
+    // at the same PAD, so the two ends line up.
+    var PAD = 28;
+    var edge = PAD - lay.margin.l;
+    var textW = EXPORT_W - PAD * 2;
+
+    lay.annotations = (lay.annotations || []).concat([
+      { text: "<b>" + titleText + "</b>",
+        xref: "paper", yref: "paper", x: 0, y: 1,
+        xanchor: "left", yanchor: "bottom", xshift: edge, yshift: 84,
+        showarrow: false, align: "left",
+        font: { family: FONT, size: 27, color: "#2D2D2D" } },
+      { text: wrapText(subText, textW, 16),
+        xref: "paper", yref: "paper", x: 0, y: 1,
+        xanchor: "left", yanchor: "bottom", xshift: edge, yshift: 22,
+        showarrow: false, align: "left",
+        font: { family: FONT, size: 16, color: "#424242" } },
+      { text: wrapText(sourceText, textW - LOGO_W - 28, 12),
+        xref: "paper", yref: "paper", x: 0, y: 0,
+        xanchor: "left", yanchor: "top", xshift: edge, yshift: -52,
+        showarrow: false, align: "left",
+        font: { family: FONT, size: 12, color: "#767676" } }
+    ]);
+
+    lay.images = [{
+      source: LOGO_PNG, xref: "paper", yref: "paper",
+      x: 1, y: -52 / plotH, xanchor: "right", yanchor: "top",
+      sizex: LOGO_W / plotW, sizey: LOGO_H / plotH,
+      sizing: "contain", layer: "above"
+    }];
+    return lay;
+  }
+
+  function downloadBrandedPng() {
+    var fig = withLightTheme(exportFigure);
+    Plotly.downloadImage(fig, {
+      format: "png", width: EXPORT_W, height: EXPORT_H, scale: 1,
+      filename: EXPORT_NAME()
+    });
+  }
+
+  var CAMERA_BUTTON = {
+    name: "downloadBrandedPng",
+    title: "Download plot as a PNG",
+    icon: Plotly.Icons.camera,
+    click: downloadBrandedPng
+  };
+
+  var CONFIG = {
+    responsive: true, displaylogo: false, scrollZoom: false,
+    modeBarButtonsToRemove: ["select2d", "lasso2d", "zoom2d", "pan2d",
+                             "zoomIn2d", "zoomOut2d", "autoScale2d", "resetScale2d",
+                             "toImage"],
+    modeBarButtonsToAdd: [CAMERA_BUTTON]
+  };
+
+  // The albers-usa outline is about 1.5x as wide as it is tall, so a fixed-height
+  // container leaves a thick empty band above and below it on a narrow embed
+  // (the article column is 779px). Track the width instead. The cap keeps the
+  // map from becoming enormous in a wide standalone window; the floor keeps it
+  // usable on a phone.
+  function fitPlotHeight() {
+    var w = document.getElementById("plot").getBoundingClientRect().width || 779;
+    var h = Math.round(Math.min(620, Math.max(360, w / 1.5)));
+    document.getElementById("plot").style.height = h + "px";
+    return h;
+  }
+
+  var drawn = false;
+  function draw() {
+    fitPlotHeight();
+    var traces = [trace(), borderTrace()];
+    if (!drawn) {
+      Plotly.newPlot("plot", traces, layout(), CONFIG).then(function () { drawn = true; });
+    } else {
+      Plotly.react("plot", traces, layout(), CONFIG);
+    }
+  }
+
+  // ---- reset --------------------------------------------------------------
+  // Getting back to the national view otherwise means finding the first option in
+  // a 50-item dropdown, which is a poor exit from a zoom.
+  var resetBtn = document.getElementById("btn-reset");
+  function syncReset() { resetBtn.disabled = !stateSel.value; }
+
+  stateSel.addEventListener("change", function () {
+    // Replace the whole geo object: relayouting individual keys leaves the
+    // previous projection's center and scale behind when switching back to
+    // albers-usa, which lands the national view somewhere in the Atlantic.
+    Plotly.relayout("plot", { geo: geoLayout(stateSel.value) });
+    syncReset();
+  });
+
+  resetBtn.addEventListener("click", function () {
+    stateSel.value = "";
+    // Setting .value fires no event, so dispatch one and let the single change
+    // handler above do the redraw — the reset must not be a second code path.
+    stateSel.dispatchEvent(new Event("change"));
+    // Focus would otherwise sit on a control that just disabled itself, which
+    // drops keyboard users to the top of the document.
+    stateSel.focus();
+  });
+
+  // ---- copy ----------------------------------------------------------------
+  // Single source for the strings the page and the PNG export both use.
+  function TITLE_TEXT() {
+    var st = stateSel.value
+      ? STATES.find(function (x) { return x.code === stateSel.value; })
+      : null;
+    return st
+      ? "The Indeed Labor Market Tightness Index in " + st.name
+      : "The Indeed Labor Market Tightness Index across US metro and micropolitan areas";
+  }
+  function SUBTITLE_TEXT() {
+    return "By metro and micropolitan area (CBSA), " + META.period +
+           ". 100 = national median area; blue reads tighter, orange reads slacker.";
+  }
+  function SOURCE_TEXT() {
+    return "Source: Indeed Hiring Lab. Indeed Labor Market Tightness Index, " +
+      META.period + ". " +
+      META.nMetros + " metro and micropolitan areas (CBSAs) with a matched Census " +
+      "boundary (boundaries: US Census 2023, cartographic 5m). " +
+      "The index is median-anchored: 100 is the median area and 15 points is one " +
+      "standard deviation. Higher reads tighter. The colour scale is symmetric about " +
+      "100 and clamps at " + LO + " and " + HI + " (" + META.clampedLo + " areas below, " +
+      META.clampedHi + " above). Grey areas are not part of a published metro or " +
+      "micropolitan area.";
+  }
+
+  // ---- footnote ------------------------------------------------------------
+  document.getElementById("footnote").textContent =
+    SOURCE_TEXT().replace("micropolitan area.",
+      "micropolitan area; hover any area for its exact index value, or download " +
+      "the full table as a CSV. ") +
+    META.nExcluded + " of the " + META.nScored + " scored areas are withheld for " +
+    "having a low posting volume, at which the estimate reflects the national " +
+    "median more than the area itself.";
+
+  // See the note in the bar-chart file: a no-op unless the parent listens.
+  function postHeight() {
+    try {
+      parent.postMessage({ type: "hiringlab-embed-height",
+                           id: "tightness-map",
+                           height: document.documentElement.scrollHeight }, "*");
+    } catch (e) { /* sandboxed or no parent — nothing to do */ }
+  }
+  var fitTimer;
+  addEventListener("resize", function () {
+    clearTimeout(fitTimer);
+    fitTimer = setTimeout(function () {
+      fitPlotHeight();
+      Plotly.relayout("plot", { geo: geoLayout(stateSel.value) });
+      Plotly.Plots.resize("plot");
+      postHeight();
+    }, 150);
+  });
+  addEventListener("load", postHeight);
+  stateSel.addEventListener("change", postHeight);
+  syncReset();
+
+  // The map's trace/layout builders already read their colours from the CSS
+  // variables at call time, so calling them inside withLightTheme() yields a
+  // light figure without disturbing the rendered map at all.
+  function exportFigure() {
+    var lay = brandLayout(layout(), TITLE_TEXT(), SUBTITLE_TEXT(), SOURCE_TEXT());
+    lay.geo.bgcolor = "#ffffff";
+    return { data: [trace(), borderTrace()], layout: lay };
+  }
+  function EXPORT_NAME() {
+    var st = stateSel.value
+      ? STATES.find(function (x) { return x.code === stateSel.value; })
+      : null;
+    return "indeed-tightness-index-map" +
+           (st ? "-" + st.name.toLowerCase().replace(/[^a-z0-9]+/g, "-") : "");
+  }
+
+  // ---- CSV export ----------------------------------------------------------
+  // The download is the full published set every time, not the current view: a
+  // file that silently contained only the top 15 would be a trap. Columns are
+  // limited to what already ships in the payload — raw posting and seeker counts
+  // are deliberately absent from it, so they cannot be exported either. The size
+  // flag is the 10k "large markets" cut, which the source line already discloses;
+  // the finer tiers are not exported because their thresholds are not published.
+  function csvCell(v) {
+    var s = String(v);
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function buildCsv() {
+    var rows = [["rank", "cbsa_code", "cbsa_title", "states", "tightness_index",
+                 "large_market"].join(",")];
+    METROS.slice()
+      .sort(function (a, b) { return a.rank - b.rank; })
+      .forEach(function (m) {
+        rows.push([m.rank, m.code, csvCell(m.name), csvCell(m.states.join(";")),
+                   m.idx.toFixed(1), m.tier === "large" ? "TRUE" : "FALSE"].join(","));
+      });
+    return rows.join("\r\n") + "\r\n";   // RFC 4180
+  }
+  document.getElementById("btn-csv").addEventListener("click", function () {
+    // The BOM is not optional: without it Excel decodes the file as ANSI and
+    // "Española, NM" and "Cañon City, CO" come back mojibake.
+    var blob = new Blob(["\ufeff" + buildCsv()], { type: "text/csv;charset=utf-8" });
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement("a");
+    a.href = url;
+    a.download = "indeed-labor-market-tightness-index-" +
+                 META.period.toLowerCase().replace(/\s+/g, "-") + ".csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  draw();
+  postHeight();
+})();
+</script>
+</body>
+</html>
