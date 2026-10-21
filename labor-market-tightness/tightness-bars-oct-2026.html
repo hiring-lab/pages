@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Indeed Labor Market Tightness Index — tightest and slackest markets</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ---- design tokens ------------------------------------------------------
+     Ported from hlplot::theme_aurora() and the Aurora palettes so the HTML reads
+     as the same system as an aurora_save() PNG. Tokens match the map file. Light
+     default for embedding in a light page; ?theme=dark forces dark, ?theme=auto
+     follows OS. */
+  :root {
+    color-scheme: light;
+    /* theme_aurora(base_family = "Noto Sans") */
+    --font:           "Noto Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    /* theme_aurora() paints panel.background and plot.background white. */
+    --surface-1:      #ffffff;
+    --page:           #FAF9F8;   /* Gray 10  */
+    /* theme_aurora(base_colour = "#2D2D2D") */
+    --text-primary:   #2D2D2D;   /* Gray 100 */
+    --text-secondary: #424242;   /* Gray 90  */
+    --text-muted:     #767676;   /* Gray 70  — 4.5:1 on white */
+    --gridline:       #cccccc;   /* theme_aurora(grid_colour) */
+    /* theme_aurora draws axis.line in base_colour, not in a light grey, so the
+       axis rule and the UI control borders are two different tokens here. */
+    --axis:           #2D2D2D;
+    --baseline:       #D4D2D0;   /* Gray 40  */
+    --hairline:       rgba(45, 45, 45, 0.12);
+    --control-bg:     #ffffff;
+    --tight:          #2557A7;   /* Aurora Blue 80   */
+    --slack:          #DF7838;   /* Aurora Orange 60 */
+    --logo:           #003A9B;   /* Indeed brand blue */
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1:      #424242;   /* Gray 90  */
+    --page:           #2D2D2D;   /* Gray 100 */
+    --text-primary:   #FAF9F8;   /* Gray 10  */
+    --text-secondary: #E4E2E0;   /* Gray 30  */
+    --text-muted:     #B4B2B1;   /* Gray 50  */
+    --gridline:       #595959;   /* Gray 80  */
+    --axis:           #E4E2E0;   /* Gray 30 — the dark analogue of base_colour */
+    --baseline:       #767676;   /* Gray 70  */
+    --hairline:       rgba(250, 249, 248, 0.14);
+    --control-bg:     #2D2D2D;
+    --tight:          #6792F0;   /* Aurora Blue 60   */
+    --slack:          #EA8B58;   /* Aurora orange G70 */
+    --logo:           #ffffff;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--page, #f9f9f7);
+    font: 400 15px/1.5 var(--font);
+  }
+  .viz-root {
+    background: var(--surface-1);
+    color: var(--text-primary);
+    padding: 20px 22px 16px;
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+
+  h1 { font-size: 1.2rem; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .subtitle { color: var(--text-secondary); font-size: 0.9rem; margin: 0 0 18px; }
+
+  .controls {
+    display: flex; flex-wrap: wrap; align-items: flex-end; gap: 18px;
+    padding-bottom: 14px; margin-bottom: 6px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field[hidden] { display: none; }
+  .field label {
+    font-size: 0.7rem; font-weight: 600; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--text-muted);
+  }
+  .field label .count {
+    color: var(--text-primary); font-variant-numeric: tabular-nums;
+    margin-left: 5px; letter-spacing: 0;
+  }
+  select, input[type="search"] {
+    font: inherit; font-size: 0.9rem; color: var(--text-primary);
+    background: var(--control-bg);
+    border: 1px solid var(--baseline); border-radius: 6px;
+    padding: 7px 10px; min-height: 36px; min-width: 185px;
+  }
+  input[type="range"] {
+    width: 185px; min-height: 36px; accent-color: var(--tight); margin: 0;
+  }
+  select:focus-visible, input:focus-visible, button:focus-visible {
+    outline: 2px solid var(--tight); outline-offset: 2px;
+  }
+  .spacer { flex: 1 1 auto; }
+  .toggle { display: flex; border: 1px solid var(--baseline); border-radius: 6px; overflow: hidden; }
+  .toggle button {
+    font: inherit; font-size: 0.85rem; color: var(--text-secondary);
+    background: var(--control-bg); border: 0; padding: 8px 14px;
+    min-height: 36px; cursor: pointer;
+  }
+  .toggle button[aria-pressed="true"] { background: var(--tight); color: #fff; font-weight: 600; }
+
+  /* Download sits in the filter row so it is reachable from either view. */
+  .btn {
+    font: inherit; font-size: 0.85rem; font-weight: 600;
+    color: var(--text-primary); background: var(--control-bg);
+    border: 1px solid var(--baseline); border-radius: 6px;
+    padding: 8px 13px; min-height: 36px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--text-muted); }
+  .btn svg {
+    width: 14px; height: 14px; flex: 0 0 auto;
+    fill: none; stroke: currentColor; stroke-width: 1.9;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+
+  #plot { width: 100%; }
+  .note { color: var(--text-muted); font-size: 0.85rem; padding: 26px 2px; }
+
+  .table-wrap { display: none; margin-top: 14px; }
+  .table-wrap.on { display: block; }
+  /* Tuned so the table view is the same page height as the chart view — an embed
+     at a fixed height must not jump when the reader switches. Retune this if the
+     subtitle wraps to a different number of lines or the control row changes:
+     table view hides four filters, so its controls row is one line shorter. */
+  .table-scroll { max-height: 553px; overflow-y: auto; border: 1px solid var(--hairline); border-radius: 6px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+  thead th {
+    position: sticky; top: 0; background: var(--surface-1);
+    text-align: left; font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--text-muted); font-weight: 600; padding: 0;
+    border-bottom: 1px solid var(--baseline);
+  }
+  /* The sort control is a real button so it is focusable and announceable; the th
+     carries aria-sort, which is what a screen reader reads out. */
+  thead th button {
+    font: inherit; font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase;
+    font-weight: 600; color: inherit; background: none; border: 0; cursor: pointer;
+    padding: 9px 12px; width: 100%; text-align: inherit;
+    display: flex; align-items: center; gap: 5px;
+  }
+  thead th.num button { justify-content: flex-end; }
+  thead th button:hover { color: var(--text-primary); }
+  thead th[aria-sort] button { color: var(--text-primary); }
+  .arrow { font-size: 0.65rem; line-height: 1; opacity: 0; }
+  thead th[aria-sort] .arrow { opacity: 1; }
+  .tcaption { margin: 0 0 8px; padding-left: 2px; color: var(--text-muted); font-size: 0.8rem; }
+  .empty { padding: 18px 12px; color: var(--text-muted); font-size: 0.85rem; }
+  tbody td { padding: 7px 12px; border-bottom: 1px solid var(--gridline); color: var(--text-secondary); }
+  tbody td.metro { color: var(--text-primary); font-variant-numeric: normal; }
+  tbody td.num { text-align: right; }
+  .chip { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 7px; vertical-align: baseline; }
+
+  /* aurora_save() lays the footer out as source line bottom-left, Indeed logo
+     bottom-right. This is the HTML equivalent of that band. */
+  footer {
+    margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--hairline);
+    display: flex; align-items: flex-end; gap: 18px;
+  }
+  footer .source {
+    flex: 1 1 auto; margin: 0;
+    color: var(--text-muted); font-size: 0.75rem; line-height: 1.55;
+  }
+  .brand { flex: 0 0 auto; }
+  .brand svg { display: block; width: 75px; height: 20px; }
+  .brand svg path { fill: var(--logo); }
+  @media (max-width: 640px) {
+    .controls { gap: 12px; }
+    select, input[type="range"] { min-width: 100%; width: 100%; }
+    .field { flex: 1 1 100%; }
+    footer { flex-wrap: wrap; gap: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="viz-root">
+
+  <h1 id="title">The Indeed Labor Market Tightness Index</h1>
+  <p class="subtitle" id="subtitle"></p>
+
+  <div class="controls">
+    <div class="field" id="field-measure">
+      <label for="measure">Measure</label>
+      <select id="measure"></select>
+    </div>
+
+    <div class="field" id="field-mode">
+      <label for="mode">Show</label>
+      <select id="mode">
+        <option value="tightest">Tightest markets</option>
+        <option value="slackest">Slackest markets</option>
+        <option value="state">By state</option>
+      </select>
+    </div>
+
+    <div class="field" id="field-n">
+      <label for="n">Markets shown <span class="count" id="n-out">15</span></label>
+      <input type="range" id="n" min="5" max="25" step="1" value="15">
+    </div>
+
+    <div class="field" id="field-state" hidden>
+      <label for="state">State</label>
+      <select id="state"></select>
+    </div>
+
+    <div class="field" id="field-size">
+      <label for="size">Market size</label>
+      <select id="size"></select>
+    </div>
+
+    <div class="spacer"></div>
+    <div class="field">
+      <button class="btn" id="btn-csv" type="button">
+        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M8 1.8v8.4M4.4 6.9 8 10.5l3.6-3.6M2 13.2h12"/>
+        </svg>
+        Download CSV
+      </button>
+    </div>
+    <div class="field">
+      <label id="viewlabel">View</label>
+      <div class="toggle" role="group" aria-labelledby="viewlabel">
+        <button id="btn-chart" type="button" aria-pressed="true">Chart</button>
+        <button id="btn-table" type="button" aria-pressed="false">Table (all markets)</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="plot" role="img" aria-label="Ranked bar chart of the Indeed Labor Market Tightness Index by US metro and micropolitan area. Use the table view for the underlying values."></div>
+  <div class="note" id="note" hidden></div>
+
+  <div class="table-wrap" id="table-wrap">
+    <div class="field" style="margin-bottom:10px">
+      <label for="search">Find an area</label>
+      <input type="search" id="search" placeholder="e.g. Duluth, or MN" autocomplete="off">
+    </div>
+    <p class="tcaption" id="tcaption"></p>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th class="num" id="th-rank" aria-sort="ascending">
+              <button type="button" data-key="rank">Rank<span class="arrow">▲</span></button>
+            </th>
+            <th id="th-name">
+              <button type="button" data-key="name">Metro / micropolitan area<span class="arrow">▲</span></button>
+            </th>
+            <th class="num" id="th-idx">
+              <button type="button" data-key="idx">Tightness index<span class="arrow">▲</span></button>
+            </th>
+            <th class="num" style="padding:9px 12px">vs. 100</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="empty" hidden>No area matches that search.</div>
+  </div>
+
+  <footer>
+    <p class="source" id="footnote"></p>
+    <span class="brand" role="img" aria-label="Indeed"><svg width="75" height="20" viewBox="0 0 75 20" fill="none" xmlns="http://www.w3.org/2000/svg"><g clip-path="url(#indeed-logo-clip)"><path fill-rule="evenodd" clip-rule="evenodd" d="M74.6134 3.45838C74.348 3.16078 73.993 3.01038 73.5133 3.01038C73.0336 3.01038 72.6674 3.16878 72.4116 3.49678C72.1573 3.81358 72.0246 4.29038 72.0246 4.91438V9.43758C71.4346 8.80238 70.8221 8.34638 70.2001 8.03918C69.8116 7.85198 69.3543 7.71278 68.8442 7.64238C68.5484 7.60238 68.2429 7.58158 67.9072 7.58158C66.3481 7.58158 65.0849 8.11758 64.1159 9.18958C63.1581 10.2616 62.6784 11.7496 62.6784 13.6616C62.6784 14.5656 62.8015 15.4088 63.0446 16.1816C63.2908 16.9544 63.6346 17.6296 64.1047 18.204C64.5732 18.78 65.1345 19.2152 65.7757 19.5336C66.4169 19.8408 67.1108 19.9992 67.864 19.9992C68.2094 19.9992 68.5356 19.9704 68.841 19.9112C69.0456 19.8808 69.2375 19.8312 69.4326 19.7704C69.9107 19.612 70.36 19.3848 70.7678 19.0968C71.1851 18.7992 71.6041 18.412 72.0214 17.9464V18.244C72.0214 18.8088 72.1637 19.236 72.4387 19.5432C72.725 19.8408 73.0815 19.9992 73.5085 19.9992C73.9466 19.9992 74.3032 19.8504 74.5782 19.564C74.8517 19.2664 74.9956 18.8296 74.9956 18.2456V4.75758C75.0004 4.19118 74.8676 3.75438 74.6134 3.45838ZM71.4442 15.9352C71.1691 16.5096 70.8014 16.9368 70.3536 17.2152C69.8947 17.4936 69.3942 17.6312 68.8442 17.6312H68.8346C68.2829 17.6312 67.784 17.4824 67.3251 17.196C66.8662 16.8984 66.5 16.4616 66.2362 15.8872C65.9723 15.3016 65.8396 14.5976 65.8396 13.764C65.8396 12.98 65.9611 12.2872 66.217 11.7016C66.4616 11.1064 66.8182 10.6504 67.2675 10.3336C67.7265 10.0056 68.2365 9.85678 68.8154 9.85678H68.8458C69.3862 9.85678 69.8851 10.0152 70.344 10.3224C70.803 10.6296 71.1691 11.0776 71.4442 11.6616C71.7192 12.2472 71.8519 12.9512 71.8519 13.764C71.8519 14.636 71.7192 15.3608 71.4442 15.9352ZM61.5479 16.0648C61.3544 15.8968 61.089 15.8072 60.7628 15.8072C60.467 15.8072 60.2431 15.8776 60.08 16.0056C59.6818 16.3624 59.3668 16.6504 59.1206 16.8584C58.8775 17.0568 58.6009 17.2552 58.3067 17.4424C58.0221 17.6216 57.7151 17.7608 57.4112 17.8408C57.0946 17.9288 56.7588 17.9688 56.3815 17.9688C56.2999 17.9688 56.2184 17.9688 56.1464 17.9592C55.6763 17.9304 55.2398 17.8008 54.8432 17.5624C54.3731 17.2952 54.0069 16.9 53.7207 16.3832C53.4457 15.8472 53.3034 15.2328 53.2938 14.5384H59.4388C60.2639 14.5384 60.9051 14.4184 61.3544 14.2008C61.8133 13.9624 62.0372 13.4664 62.0372 12.7032C62.0372 11.8696 61.8133 11.0568 61.3752 10.2536C60.9371 9.45838 60.2847 8.80398 59.3988 8.29998C58.521 7.79438 57.472 7.54638 56.2392 7.54638H56.148C55.2414 7.55598 54.4051 7.70638 53.6616 7.98318C52.8876 8.28078 52.2336 8.70798 51.6932 9.25198C51.1751 9.80718 50.7673 10.4712 50.4923 11.2456C50.2173 12.02 50.0734 12.8632 50.0734 13.764C50.0734 15.6888 50.6346 17.196 51.7555 18.316C52.8141 19.3784 54.282 19.9336 56.1464 19.9928C56.2488 20.0024 56.3591 20.0024 56.4726 20.0024C57.3489 20.0024 58.1324 19.8936 58.8152 19.6664C59.498 19.4376 60.0592 19.1592 60.5085 18.8232C60.9546 18.476 61.292 18.1192 61.5159 17.7528C61.7398 17.3864 61.8533 17.0584 61.8533 16.7896C61.8533 16.4808 61.7526 16.2328 61.5479 16.0648ZM54.2116 10.46C54.7121 9.93358 55.3533 9.67598 56.1384 9.67598H56.1496C56.9635 9.67598 57.6271 9.93358 58.126 10.4488C58.6265 10.9656 58.9207 11.7496 58.9927 12.7992H53.2954C53.3961 11.7688 53.7031 10.9848 54.2116 10.46ZM48.1674 15.8056C47.8619 15.8056 47.6381 15.876 47.475 16.004C47.088 16.3608 46.7618 16.6488 46.5172 16.8568C46.2725 17.0552 46.0071 17.2536 45.7113 17.4408C45.4171 17.62 45.1196 17.7592 44.8046 17.8392C44.4992 17.9272 44.1522 17.9672 43.7749 17.9672C43.6949 17.9672 43.6134 17.9672 43.5414 17.9576C43.0713 17.9288 42.6348 17.7992 42.2366 17.5608C41.7793 17.2936 41.4019 16.8984 41.1269 16.3816C40.8407 15.8456 40.6984 15.2312 40.6872 14.5368H46.8418C47.6573 14.5368 48.2985 14.4168 48.7574 14.1992C49.2051 13.9608 49.4306 13.4648 49.4306 12.7016C49.4306 11.868 49.2163 11.0552 48.7782 10.252C48.3401 9.45678 47.6781 8.80238 46.8018 8.29838C45.9239 7.79278 44.8654 7.54478 43.6438 7.54478H43.5414C42.6348 7.55438 41.8097 7.70478 41.055 7.98158C40.2794 8.27918 39.627 8.70638 39.0978 9.25038C38.5685 9.80558 38.1607 10.4696 37.8857 11.244C37.6091 12.0184 37.4668 12.8616 37.4668 13.7624C37.4668 15.6872 38.0376 17.1944 39.1585 18.3144C40.2187 19.3768 41.6754 19.932 43.5398 19.9912C43.6518 20.0008 43.7525 20.0008 43.866 20.0008C44.7519 20.0008 45.5274 19.892 46.2086 19.6648C46.8914 19.436 47.4526 19.1576 47.9003 18.8216C48.3592 18.4744 48.6854 18.1176 48.9093 17.7512C49.1332 17.3848 49.2467 17.0568 49.2467 16.788C49.2467 16.4808 49.1444 16.2328 48.9509 16.0648C48.7494 15.8952 48.4824 15.8056 48.1674 15.8056ZM41.605 10.46C42.1039 9.93358 42.7467 9.67598 43.5318 9.67598H43.543C44.3569 9.67598 45.0205 9.93358 45.5194 10.4488C46.0279 10.9656 46.3141 11.7496 46.3957 12.7992H40.6888C40.8007 11.7688 41.1077 10.9848 41.605 10.46ZM6.5467 17.9688V10.668C6.75937 10.6872 6.96404 10.6968 7.17831 10.6968C8.19688 10.6968 9.15629 10.4296 9.97019 9.95278V17.9672C9.97019 18.652 9.80709 19.1576 9.49048 19.4952C9.17548 19.8312 8.75654 19.9992 8.24805 19.9992C7.74756 19.9992 7.35101 19.8312 7.02481 19.484C6.7098 19.148 6.5467 18.6424 6.5467 17.9688ZM36.1476 3.45838C35.8822 3.16078 35.516 3.01038 35.0571 3.01038C34.5774 3.01038 34.2112 3.16878 33.9554 3.49678C33.6915 3.81358 33.5684 4.29038 33.5684 4.91438V9.43758C32.9784 8.80238 32.3675 8.34638 31.7439 8.03918C31.3474 7.85198 30.898 7.71278 30.3896 7.64238C30.0953 7.60238 29.7883 7.58158 29.4525 7.58158C27.8935 7.58158 26.6191 8.11758 25.6613 9.18958C24.7035 10.2616 24.2238 11.7496 24.2238 13.6616C24.2238 14.5656 24.3469 15.4088 24.5803 16.1816C24.825 16.9544 25.1816 17.6296 25.6517 18.204C26.1202 18.78 26.6799 19.2152 27.3227 19.5336C27.9655 19.8408 28.6562 19.9992 29.411 19.9992C29.7468 19.9992 30.073 19.9704 30.388 19.9112C30.5926 19.8808 30.7861 19.8312 30.9796 19.7704C31.4577 19.612 31.907 19.3848 32.3148 19.0968C32.7321 18.7992 33.1415 18.412 33.5668 17.9464V18.244C33.5668 18.8088 33.7107 19.236 33.9857 19.5432C34.2608 19.8408 34.6285 19.9992 35.0555 19.9992C35.4728 19.9992 35.8406 19.8504 36.1156 19.564C36.3906 19.2664 36.5218 18.8296 36.5218 18.2456V4.75758C36.5234 4.19118 36.4018 3.75438 36.1476 3.45838ZM32.9879 15.9352C32.7129 16.5096 32.3451 16.9368 31.8878 17.2152C31.4385 17.4936 30.9284 17.6312 30.3896 17.6312H30.38C29.8299 17.6312 29.3294 17.4824 28.8721 17.196C28.4036 16.8984 28.047 16.4616 27.7816 15.8872C27.5177 15.3016 27.385 14.5976 27.385 13.764C27.385 12.98 27.5081 12.2872 27.7512 11.7016C28.0054 11.1064 28.3524 10.6504 28.8113 10.3336C29.2591 10.0056 29.7787 9.85678 30.3496 9.85678H30.3896C30.93 9.85678 31.4289 10.0152 31.8782 10.3224C32.3467 10.6296 32.7129 11.0776 32.9879 11.6616C33.2518 12.2472 33.3957 12.9512 33.3957 13.764C33.3957 14.636 33.2518 15.3608 32.9879 15.9352ZM14.9943 9.25038V9.62798C15.5539 8.91278 16.1552 8.39758 16.8076 8.05998C17.4695 7.73358 18.2243 7.56398 19.0798 7.56398C19.9064 7.56398 20.65 7.74318 21.3008 8.09038C21.9532 8.43598 22.4313 8.93358 22.7575 9.57838C22.9717 9.95438 23.1045 10.3624 23.1652 10.7992C23.226 11.2248 23.2564 11.78 23.2564 12.4552V18.14C23.2564 18.7544 23.1029 19.22 22.8182 19.5272C22.5336 19.844 22.1562 20.0024 21.6973 20.0024C21.2288 20.0024 20.8515 19.844 20.5556 19.5176C20.2598 19.1992 20.1175 18.7352 20.1175 18.14V13.0472C20.1175 12.036 19.9736 11.2632 19.689 10.7272C19.4043 10.1928 18.8223 9.92398 17.9684 9.92398C17.4072 9.92398 16.8987 10.092 16.4398 10.4104C15.9809 10.7384 15.6355 11.1832 15.4212 11.7592C15.2677 12.2152 15.1974 13.0584 15.1974 14.3192V18.1384C15.1974 18.7624 15.0454 19.2184 14.7496 19.5368C14.4538 19.844 14.078 20.0024 13.6079 20.0024C13.149 20.0024 12.7812 19.844 12.487 19.5176C12.1912 19.1992 12.0489 18.7352 12.0489 18.14V9.29998C12.0489 8.71598 12.1816 8.27918 12.4471 8.00078C12.7013 7.71438 13.0579 7.56398 13.5168 7.56398C13.7918 7.56398 14.0365 7.62318 14.2603 7.75278C14.4842 7.88078 14.6665 8.06958 14.8008 8.32718C14.9319 8.58478 14.9943 8.89358 14.9943 9.25038ZM6.56589 0.472774C8.68618 -0.271226 11.1007 -0.231226 12.914 1.29517C13.2514 1.60237 13.6367 1.98957 13.7902 2.44557C13.9741 3.02158 13.149 2.38478 13.0355 2.30638C12.4439 1.92877 11.8538 1.61197 11.1918 1.39437C7.62603 0.323974 4.25212 2.25838 2.15422 5.26318C1.27796 6.59118 0.707115 7.98958 0.238604 9.52718C0.187436 9.69518 0.147461 9.91438 0.0547182 10.0616C-0.0380244 10.2312 0.0147429 9.60718 0.0147429 9.58638C0.0850994 8.95118 0.217817 8.33678 0.382515 7.72238C1.34992 4.44878 3.48939 1.72237 6.56589 0.472774ZM10.6722 6.35438C10.6722 7.74478 9.54485 8.87278 8.15531 8.87278C6.76577 8.87278 5.64006 7.74478 5.64006 6.35438C5.64006 4.96398 6.76577 3.83598 8.15531 3.83598C9.54485 3.83598 10.6722 4.96238 10.6722 6.35438Z"/></g><defs><clipPath id="indeed-logo-clip"><rect width="75" height="20" fill="white"/></clipPath></defs></svg></span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var DATA = {"metros":[{"code":30150,"name":"Lebanon-Claremont, NH-VT","idxM":145.2,"rankM":1,"idx3":144.8,"rank3":1,"states":["NH","VT"],"tier":"large"},{"code":15540,"name":"Burlington-South Burlington, VT","idxM":140.9,"rankM":2,"idx3":140.6,"rank3":2,"states":["VT"],"tier":"large"},{"code":24580,"name":"Green Bay, WI","idxM":140.1,"rankM":3,"idx3":137.6,"rank3":5,"states":["WI"],"tier":"large"},{"code":38860,"name":"Portland-South Portland, ME","idxM":139.2,"rankM":4,"idx3":138.4,"rank3":3,"states":["ME"],"tier":"large"},{"code":38300,"name":"Pittsburgh, PA","idxM":137.8,"rankM":5,"idx3":137.6,"rank3":6,"states":["PA"],"tier":"large"},{"code":31540,"name":"Madison, WI","idxM":137.6,"rankM":6,"idx3":137.9,"rank3":4,"states":["WI"],"tier":"large"},{"code":20260,"name":"Duluth, MN-WI","idxM":136.7,"rankM":7,"idx3":137.5,"rank3":7,"states":["MN","WI"],"tier":"reliable"},{"code":11540,"name":"Appleton, WI","idxM":136.4,"rankM":8,"idx3":133,"rank3":13,"states":["WI"],"tier":"large"},{"code":14460,"name":"Boston-Cambridge-Newton, MA-NH","idxM":136.3,"rankM":9,"idx3":137.2,"rank3":8,"states":["MA","NH"],"tier":"large"},{"code":25740,"name":"Helena, MT","idxM":135.4,"rankM":10,"idx3":132.8,"rank3":14,"states":["MT"],"tier":"reliable"},{"code":33460,"name":"Minneapolis-St. Paul-Bloomington, MN-WI","idxM":134.4,"rankM":11,"idx3":135.4,"rank3":9,"states":["MN","WI"],"tier":"large"},{"code":45900,"name":"Traverse City, MI","idxM":134.4,"rankM":12,"idx3":133.3,"rank3":12,"states":["MI"],"tier":"reliable"},{"code":14660,"name":"Brainerd, MN","idxM":133.5,"rankM":13,"idx3":133.8,"rank3":11,"states":["MN"],"tier":"reliable"},{"code":18140,"name":"Columbus, OH","idxM":133,"rankM":14,"idx3":129,"rank3":25,"states":["OH"],"tier":"large"},{"code":31820,"name":"Manitowoc, WI","idxM":132.6,"rankM":15,"idx3":126.6,"rank3":35,"states":["WI"],"tier":"reliable"},{"code":11260,"name":"Anchorage, AK","idxM":131.9,"rankM":16,"idx3":134.9,"rank3":10,"states":["AK"],"tier":"large"},{"code":21820,"name":"Fairbanks-College, AK","idxM":131.2,"rankM":17,"idx3":128.6,"rank3":28,"states":["AK"],"tier":"reliable"},{"code":29060,"name":"Laconia, NH","idxM":131.1,"rankM":18,"idx3":128,"rank3":29,"states":["NH"],"tier":"reliable"},{"code":28140,"name":"Kansas City, MO-KS","idxM":130.9,"rankM":19,"idx3":132,"rank3":15,"states":["MO","KS"],"tier":"large"},{"code":31700,"name":"Manchester-Nashua, NH","idxM":130.8,"rankM":20,"idx3":131.5,"rank3":16,"states":["NH"],"tier":"large"},{"code":43100,"name":"Sheboygan, WI","idxM":130.5,"rankM":21,"idx3":129.5,"rank3":23,"states":["WI"],"tier":"reliable"},{"code":38340,"name":"Pittsfield, MA","idxM":130.5,"rankM":22,"idx3":131.3,"rank3":17,"states":["MA"],"tier":"reliable"},{"code":12700,"name":"Barnstable Town, MA","idxM":130.1,"rankM":23,"idx3":130,"rank3":19,"states":["MA"],"tier":"reliable"},{"code":40340,"name":"Rochester, MN","idxM":129.8,"rankM":24,"idx3":126,"rank3":39,"states":["MN"],"tier":"reliable"},{"code":28060,"name":"Kalispell, MT","idxM":129.6,"rankM":25,"idx3":130,"rank3":20,"states":["MT"],"tier":"reliable"},{"code":46520,"name":"Urban Honolulu, HI","idxM":129.5,"rankM":26,"idx3":129.8,"rank3":21,"states":["HI"],"tier":"large"},{"code":24220,"name":"Grand Forks, ND-MN","idxM":129.3,"rankM":27,"idx3":131,"rank3":18,"states":["ND","MN"],"tier":"reliable"},{"code":33340,"name":"Milwaukee-Waukesha, WI","idxM":129.2,"rankM":28,"idx3":129.8,"rank3":22,"states":["WI"],"tier":"large"},{"code":42140,"name":"Santa Fe, NM","idxM":128.8,"rankM":29,"idx3":128.8,"rank3":26,"states":["NM"],"tier":"reliable"},{"code":20740,"name":"Eau Claire, WI","idxM":128.5,"rankM":30,"idx3":127.9,"rank3":30,"states":["WI"],"tier":"reliable"},{"code":40860,"name":"Rutland, VT","idxM":128.4,"rankM":31,"idx3":125.2,"rank3":43,"states":["VT"],"tier":"reliable"},{"code":24340,"name":"Grand Rapids-Wyoming-Kentwood, MI","idxM":128.3,"rankM":32,"idx3":125.3,"rank3":42,"states":["MI"],"tier":"large"},{"code":29100,"name":"La Crosse-Onalaska, WI-MN","idxM":128.1,"rankM":33,"idx3":125.7,"rank3":40,"states":["WI","MN"],"tier":"reliable"},{"code":13900,"name":"Bismarck, ND","idxM":128,"rankM":34,"idx3":127.8,"rank3":31,"states":["ND"],"tier":"reliable"},{"code":10820,"name":"Alexandria, MN","idxM":128,"rankM":35,"idx3":127.1,"rank3":34,"states":["MN"],"tier":"published"},{"code":39900,"name":"Reno, NV","idxM":127.5,"rankM":36,"idx3":126.5,"rank3":37,"states":["NV"],"tier":"large"},{"code":13460,"name":"Bend, OR","idxM":127.3,"rankM":37,"idx3":128.8,"rank3":27,"states":["OR"],"tier":"reliable"},{"code":39960,"name":"Rice Lake, WI","idxM":127.2,"rankM":38,"idx3":124.3,"rank3":54,"states":["WI"],"tier":"published"},{"code":26900,"name":"Indianapolis-Carmel-Greenwood, IN","idxM":127.1,"rankM":39,"idx3":124.7,"rank3":52,"states":["IN"],"tier":"large"},{"code":11700,"name":"Asheville, NC","idxM":127,"rankM":40,"idx3":125.4,"rank3":41,"states":["NC"],"tier":"large"},{"code":20220,"name":"Dubuque, IA","idxM":126.9,"rankM":41,"idx3":124.1,"rank3":58,"states":["IA"],"tier":"reliable"},{"code":13540,"name":"Bennington, VT","idxM":126.7,"rankM":42,"idx3":124.2,"rank3":55,"states":["VT"],"tier":"published"},{"code":19740,"name":"Denver-Aurora-Centennial, CO","idxM":126.6,"rankM":43,"idx3":127.4,"rank3":33,"states":["CO"],"tier":"large"},{"code":14260,"name":"Boise City, ID","idxM":126.5,"rankM":44,"idx3":129.2,"rank3":24,"states":["ID"],"tier":"large"},{"code":28180,"name":"Kapaa, HI","idxM":126.4,"rankM":45,"idx3":127.5,"rank3":32,"states":["HI"],"tier":"reliable"},{"code":10740,"name":"Albuquerque, NM","idxM":126.3,"rankM":46,"idx3":124.6,"rank3":53,"states":["NM"],"tier":"large"},{"code":31860,"name":"Mankato, MN","idxM":125.9,"rankM":47,"idx3":123.7,"rank3":61,"states":["MN"],"tier":"reliable"},{"code":36940,"name":"Owatonna, MN","idxM":125.7,"rankM":48,"idx3":124.8,"rank3":48,"states":["MN"],"tier":"published"},{"code":22260,"name":"Fergus Falls, MN","idxM":125.6,"rankM":49,"idx3":124.8,"rank3":49,"states":["MN"],"tier":"published"},{"code":22020,"name":"Fargo, ND-MN","idxM":125.5,"rankM":50,"idx3":123.5,"rank3":65,"states":["ND","MN"],"tier":"large"},{"code":19780,"name":"Des Moines-West Des Moines, IA","idxM":125.5,"rankM":51,"idx3":123.5,"rank3":66,"states":["IA"],"tier":"large"},{"code":17410,"name":"Cleveland, OH","idxM":125.4,"rankM":52,"idx3":123.7,"rank3":62,"states":["OH"],"tier":"large"},{"code":17140,"name":"Cincinnati, OH-KY-IN","idxM":125.4,"rankM":53,"idx3":125.2,"rank3":44,"states":["OH","KY","IN"],"tier":"large"},{"code":36780,"name":"Oshkosh-Neenah, WI","idxM":125.2,"rankM":54,"idx3":123.9,"rank3":59,"states":["WI"],"tier":"reliable"},{"code":13740,"name":"Billings, MT","idxM":125.2,"rankM":55,"idx3":124.2,"rank3":56,"states":["MT"],"tier":"reliable"},{"code":14710,"name":"Brattleboro, VT","idxM":125.1,"rankM":56,"idx3":126.6,"rank3":36,"states":["VT"],"tier":"published"},{"code":34980,"name":"Nashville-Davidson--Murfreesboro--Franklin, TN","idxM":125,"rankM":57,"idx3":123.7,"rank3":63,"states":["TN"],"tier":"large"},{"code":18180,"name":"Concord, NH","idxM":125,"rankM":58,"idx3":126.1,"rank3":38,"states":["NH"],"tier":"reliable"},{"code":14580,"name":"Bozeman, MT","idxM":124.9,"rankM":59,"idx3":124.8,"rank3":50,"states":["MT"],"tier":"reliable"},{"code":36540,"name":"Omaha, NE-IA","idxM":124.7,"rankM":60,"idx3":124.2,"rank3":57,"states":["NE","IA"],"tier":"large"},{"code":33540,"name":"Missoula, MT","idxM":124.7,"rankM":61,"idx3":125.2,"rank3":45,"states":["MT"],"tier":"reliable"},{"code":41060,"name":"St. Cloud, MN","idxM":124.7,"rankM":62,"idx3":122.4,"rank3":74,"states":["MN"],"tier":"reliable"},{"code":48620,"name":"Wichita, KS","idxM":124.5,"rankM":63,"idx3":123.6,"rank3":64,"states":["KS"],"tier":"large"},{"code":35580,"name":"New Ulm, MN","idxM":124.4,"rankM":64,"idx3":123.4,"rank3":67,"states":["MN"],"tier":"published"},{"code":41180,"name":"St. Louis, MO-IL","idxM":124.4,"rankM":65,"idx3":123.9,"rank3":60,"states":["MO","IL"],"tier":"large"},{"code":22540,"name":"Fond du Lac, WI","idxM":124.3,"rankM":66,"idx3":121.2,"rank3":82,"states":["WI"],"tier":"reliable"},{"code":48820,"name":"Willmar, MN","idxM":124.3,"rankM":67,"idx3":122.8,"rank3":72,"states":["MN"],"tier":"published"},{"code":12660,"name":"Baraboo, WI","idxM":124.3,"rankM":68,"idx3":122.9,"rank3":68,"states":["WI"],"tier":"reliable"},{"code":16700,"name":"Charleston-North Charleston, SC","idxM":124.1,"rankM":69,"idx3":122.3,"rank3":75,"states":["SC"],"tier":"large"},{"code":44300,"name":"State College, PA","idxM":124,"rankM":70,"idx3":122.9,"rank3":69,"states":["PA"],"tier":"reliable"},{"code":12740,"name":"Barre, VT","idxM":123.8,"rankM":71,"idx3":125,"rank3":47,"states":["VT"],"tier":"reliable"},{"code":40090,"name":"Rifle, CO","idxM":122.9,"rankM":72,"idx3":124.8,"rank3":51,"states":["CO"],"tier":"reliable"},{"code":21500,"name":"Erie, PA","idxM":122.9,"rankM":73,"idx3":120.1,"rank3":95,"states":["PA"],"tier":"reliable"},{"code":16300,"name":"Cedar Rapids, IA","idxM":122.9,"rankM":74,"idx3":121.2,"rank3":83,"states":["IA"],"tier":"large"},{"code":27980,"name":"Kahului-Wailuku, HI","idxM":122.6,"rankM":75,"idx3":122.7,"rank3":73,"states":["HI"],"tier":"reliable"},{"code":27620,"name":"Jefferson City, MO","idxM":122.5,"rankM":76,"idx3":121.3,"rank3":79,"states":["MO"],"tier":"reliable"},{"code":39860,"name":"Red Wing, MN","idxM":122.5,"rankM":77,"idx3":125.1,"rank3":46,"states":["MN"],"tier":"published"},{"code":23060,"name":"Fort Wayne, IN","idxM":122.4,"rankM":78,"idx3":119.9,"rank3":98,"states":["IN"],"tier":"large"},{"code":43620,"name":"Sioux Falls, SD-MN","idxM":122.3,"rankM":79,"idx3":121.6,"rank3":77,"states":["SD","MN"],"tier":"large"},{"code":10180,"name":"Abilene, TX","idxM":122.1,"rankM":80,"idx3":119.7,"rank3":99,"states":["TX"],"tier":"reliable"},{"code":32140,"name":"Marshall, MN","idxM":121.9,"rankM":81,"idx3":118.8,"rank3":111,"states":["MN"],"tier":"published"},{"code":24330,"name":"Grand Rapids, MN","idxM":121.9,"rankM":82,"idx3":120.8,"rank3":88,"states":["MN"],"tier":"published"},{"code":49100,"name":"Winona, MN","idxM":121.8,"rankM":83,"idx3":121.3,"rank3":80,"states":["MN"],"tier":"published"},{"code":40380,"name":"Rochester, NY","idxM":121.6,"rankM":84,"idx3":120,"rank3":97,"states":["NY"],"tier":"large"},{"code":37950,"name":"Petoskey, MI","idxM":121.5,"rankM":85,"idx3":122.2,"rank3":76,"states":["MI"],"tier":"published"},{"code":16980,"name":"Chicago-Naperville-Elgin, IL-IN","idxM":121.5,"rankM":86,"idx3":120.5,"rank3":91,"states":["IL","IN"],"tier":"large"},{"code":41460,"name":"Salina, KS","idxM":121.3,"rankM":87,"idx3":121.3,"rank3":81,"states":["KS"],"tier":"reliable"},{"code":38420,"name":"Platteville, WI","idxM":121.3,"rankM":88,"idx3":118,"rank3":117,"states":["WI"],"tier":"published"},{"code":25900,"name":"Hilo-Kailua, HI","idxM":121.2,"rankM":89,"idx3":121.5,"rank3":78,"states":["HI"],"tier":"reliable"},{"code":10580,"name":"Albany-Schenectady-Troy, NY","idxM":121.1,"rankM":90,"idx3":119,"rank3":108,"states":["NY"],"tier":"large"},{"code":23240,"name":"Fredericksburg, TX","idxM":121.1,"rankM":91,"idx3":116.8,"rank3":130,"states":["TX"],"tier":"published"},{"code":31740,"name":"Manhattan, KS","idxM":120.9,"rankM":92,"idx3":119.1,"rank3":107,"states":["KS"],"tier":"reliable"},{"code":17650,"name":"Cody, WY","idxM":120.8,"rankM":93,"idx3":122.9,"rank3":70,"states":["WY"],"tier":"published"},{"code":29200,"name":"Lafayette-West Lafayette, IN","idxM":120.7,"rankM":94,"idx3":120.9,"rank3":87,"states":["IN"],"tier":"reliable"},{"code":19810,"name":"Detroit Lakes, MN","idxM":120.7,"rankM":95,"idx3":119.7,"rank3":100,"states":["MN"],"tier":"published"},{"code":43260,"name":"Sheridan, WY","idxM":120.5,"rankM":96,"idx3":119.3,"rank3":105,"states":["WY"],"tier":"published"},{"code":22060,"name":"Faribault-Northfield, MN","idxM":120.5,"rankM":97,"idx3":119,"rank3":109,"states":["MN"],"tier":"published"},{"code":40060,"name":"Richmond, VA","idxM":120.4,"rankM":98,"idx3":120.6,"rank3":90,"states":["VA"],"tier":"large"},{"code":13180,"name":"Beaver Dam, WI","idxM":120.3,"rankM":99,"idx3":120.3,"rank3":92,"states":["WI"],"tier":"reliable"},{"code":28260,"name":"Kearney, NE","idxM":120.1,"rankM":100,"idx3":118.5,"rank3":113,"states":["NE"],"tier":"reliable"},{"code":10100,"name":"Aberdeen, SD","idxM":119.9,"rankM":101,"idx3":119.3,"rank3":106,"states":["SD"],"tier":"published"},{"code":45820,"name":"Topeka, KS","idxM":119.8,"rankM":102,"idx3":121,"rank3":85,"states":["KS"],"tier":"reliable"},{"code":48020,"name":"Watertown-Fort Atkinson, WI","idxM":119.6,"rankM":103,"idx3":119.6,"rank3":102,"states":["WI"],"tier":"reliable"},{"code":16820,"name":"Charlottesville, VA","idxM":119.2,"rankM":104,"idx3":117.1,"rank3":125,"states":["VA"],"tier":"large"},{"code":29540,"name":"Lancaster, PA","idxM":119.2,"rankM":105,"idx3":119.4,"rank3":104,"states":["PA"],"tier":"large"},{"code":35740,"name":"Norfolk, NE","idxM":118.9,"rankM":106,"idx3":117,"rank3":128,"states":["NE"],"tier":"published"},{"code":30700,"name":"Lincoln, NE","idxM":118.9,"rankM":107,"idx3":117.7,"rank3":120,"states":["NE"],"tier":"large"},{"code":25420,"name":"Harrisburg-Carlisle, PA","idxM":118.8,"rankM":108,"idx3":120.1,"rank3":96,"states":["PA"],"tier":"large"},{"code":27420,"name":"Jamestown, ND","idxM":118.8,"rankM":109,"idx3":120.2,"rank3":94,"states":["ND"],"tier":"published"},{"code":30340,"name":"Lewiston-Auburn, ME","idxM":118.7,"rankM":110,"idx3":115,"rank3":145,"states":["ME"],"tier":"reliable"},{"code":39660,"name":"Rapid City, SD","idxM":118.7,"rankM":111,"idx3":119.6,"rank3":103,"states":["SD"],"tier":"reliable"},{"code":49220,"name":"Wisconsin Rapids-Marshfield, WI","idxM":118.6,"rankM":112,"idx3":114.2,"rank3":155,"states":["WI"],"tier":"reliable"},{"code":44620,"name":"Stevens Point-Plover, WI","idxM":118.5,"rankM":113,"idx3":117.5,"rank3":122,"states":["WI"],"tier":"reliable"},{"code":39150,"name":"Prescott Valley-Prescott, AZ","idxM":118.5,"rankM":114,"idx3":118.2,"rank3":116,"states":["AZ"],"tier":"reliable"},{"code":43890,"name":"Sparta, WI","idxM":118.3,"rankM":115,"idx3":117.8,"rank3":118,"states":["WI"],"tier":"published"},{"code":10660,"name":"Albert Lea, MN","idxM":118.3,"rankM":116,"idx3":116.9,"rank3":129,"states":["MN"],"tier":"published"},{"code":12380,"name":"Austin, MN","idxM":118.3,"rankM":117,"idx3":112.9,"rank3":172,"states":["MN"],"tier":"published"},{"code":38900,"name":"Portland-Vancouver-Hillsboro, OR-WA","idxM":118.3,"rankM":118,"idx3":118.8,"rank3":112,"states":["OR","WA"],"tier":"large"},{"code":25940,"name":"Hilton Head Island-Bluffton-Port Royal, SC","idxM":118.2,"rankM":119,"idx3":117.6,"rank3":121,"states":["SC"],"tier":"reliable"},{"code":32100,"name":"Marquette, MI","idxM":118.2,"rankM":120,"idx3":122.9,"rank3":71,"states":["MI"],"tier":"reliable"},{"code":12300,"name":"Augusta-Waterville, ME","idxM":117.9,"rankM":121,"idx3":118.4,"rank3":114,"states":["ME"],"tier":"reliable"},{"code":26780,"name":"Hutchinson, MN","idxM":117.9,"rankM":122,"idx3":119.7,"rank3":101,"states":["MN"],"tier":"published"},{"code":47900,"name":"Washington-Arlington-Alexandria, DC-VA-MD-WV","idxM":117.8,"rankM":123,"idx3":117.8,"rank3":119,"states":["DC","VA","MD","WV"],"tier":"large"},{"code":24640,"name":"Greenfield, MA","idxM":117.7,"rankM":124,"idx3":115.2,"rank3":143,"states":["MA"],"tier":"reliable"},{"code":32740,"name":"Meadville, PA","idxM":117.7,"rankM":125,"idx3":111.6,"rank3":190,"states":["PA"],"tier":"reliable"},{"code":28300,"name":"Keene, NH","idxM":117.6,"rankM":126,"idx3":121,"rank3":86,"states":["NH"],"tier":"reliable"},{"code":46140,"name":"Tulsa, OK","idxM":117.6,"rankM":127,"idx3":117.1,"rank3":126,"states":["OK"],"tier":"large"},{"code":19100,"name":"Dallas-Fort Worth-Arlington, TX","idxM":117.5,"rankM":128,"idx3":116.2,"rank3":133,"states":["TX"],"tier":"large"},{"code":37980,"name":"Philadelphia-Camden-Wilmington, PA-NJ-DE-MD","idxM":117.5,"rankM":129,"idx3":116.3,"rank3":132,"states":["PA","NJ","DE","MD"],"tier":"large"},{"code":12420,"name":"Austin-Round Rock-San Marcos, TX","idxM":117.5,"rankM":130,"idx3":114.7,"rank3":152,"states":["TX"],"tier":"large"},{"code":26860,"name":"Indiana, PA","idxM":117.5,"rankM":131,"idx3":108.6,"rank3":256,"states":["PA"],"tier":"reliable"},{"code":15380,"name":"Buffalo-Cheektowaga, NY","idxM":117.4,"rankM":132,"idx3":114,"rank3":157,"states":["NY"],"tier":"large"},{"code":24260,"name":"Grand Island, NE","idxM":117.3,"rankM":133,"idx3":118.9,"rank3":110,"states":["NE"],"tier":"reliable"},{"code":38700,"name":"Pontiac, IL","idxM":117.3,"rankM":134,"idx3":115,"rank3":146,"states":["IL"],"tier":"published"},{"code":43020,"name":"Shawano, WI","idxM":117.1,"rankM":135,"idx3":115.9,"rank3":137,"states":["WI"],"tier":"published"},{"code":16180,"name":"Carson City, NV","idxM":117.1,"rankM":136,"idx3":108,"rank3":267,"states":["NV"],"tier":"reliable"},{"code":18100,"name":"Columbus, NE","idxM":117.1,"rankM":137,"idx3":120.8,"rank3":89,"states":["NE"],"tier":"published"},{"code":49620,"name":"York-Hanover, PA","idxM":117,"rankM":138,"idx3":117.2,"rank3":124,"states":["PA"],"tier":"large"},{"code":30820,"name":"Lock Haven, PA","idxM":116.8,"rankM":139,"idx3":106.4,"rank3":311,"states":["PA"],"tier":"published"},{"code":27060,"name":"Ithaca, NY","idxM":116.8,"rankM":140,"idx3":111.3,"rank3":198,"states":["NY"],"tier":"reliable"},{"code":45060,"name":"Syracuse, NY","idxM":116.7,"rankM":141,"idx3":118.3,"rank3":115,"states":["NY"],"tier":"large"},{"code":30260,"name":"Lewisburg, PA","idxM":116.6,"rankM":142,"idx3":105.9,"rank3":331,"states":["PA"],"tier":"published"},{"code":30300,"name":"Lewiston, ID-WA","idxM":116.4,"rankM":143,"idx3":106.2,"rank3":318,"states":["ID","WA"],"tier":"reliable"},{"code":16540,"name":"Chambersburg, PA","idxM":116.4,"rankM":144,"idx3":114.8,"rank3":148,"states":["PA"],"tier":"reliable"},{"code":28740,"name":"Kingston, NY","idxM":116.3,"rankM":145,"idx3":108.8,"rank3":251,"states":["NY"],"tier":"reliable"},{"code":12620,"name":"Bangor, ME","idxM":116.3,"rankM":146,"idx3":120.3,"rank3":93,"states":["ME"],"tier":"reliable"},{"code":40220,"name":"Roanoke, VA","idxM":116.2,"rankM":147,"idx3":111.7,"rank3":188,"states":["VA"],"tier":"large"},{"code":13420,"name":"Bemidji, MN","idxM":116.2,"rankM":148,"idx3":116.6,"rank3":131,"states":["MN"],"tier":"published"},{"code":38460,"name":"Plattsburgh, NY","idxM":116.1,"rankM":149,"idx3":113.7,"rank3":166,"states":["NY"],"tier":"reliable"},{"code":14820,"name":"Brevard, NC","idxM":116.1,"rankM":150,"idx3":114.4,"rank3":154,"states":["NC"],"tier":"published"},{"code":28940,"name":"Knoxville, TN","idxM":116,"rankM":151,"idx3":116.2,"rank3":134,"states":["TN"],"tier":"large"},{"code":11820,"name":"Astoria, OR","idxM":116,"rankM":152,"idx3":113.8,"rank3":161,"states":["OR"],"tier":"published"},{"code":19430,"name":"Dayton-Kettering-Beavercreek, OH","idxM":116,"rankM":153,"idx3":114.5,"rank3":153,"states":["OH"],"tier":"large"},{"code":27020,"name":"Iron Mountain, MI-WI","idxM":115.9,"rankM":154,"idx3":117.4,"rank3":123,"states":["MI","WI"],"tier":"published"},{"code":33500,"name":"Minot, ND","idxM":115.8,"rankM":155,"idx3":115.9,"rank3":138,"states":["ND"],"tier":"reliable"},{"code":30620,"name":"Lima, OH","idxM":115.6,"rankM":156,"idx3":113.9,"rank3":159,"states":["OH"],"tier":"reliable"},{"code":47980,"name":"Watertown, SD","idxM":115.3,"rankM":157,"idx3":115.4,"rank3":142,"states":["SD"],"tier":"published"},{"code":31940,"name":"Marinette, WI-MI","idxM":115.3,"rankM":158,"idx3":116.2,"rank3":135,"states":["WI","MI"],"tier":"published"},{"code":21580,"name":"Española, NM","idxM":115.2,"rankM":159,"idx3":114.8,"rank3":149,"states":["NM"],"tier":"published"},{"code":48140,"name":"Wausau, WI","idxM":115.2,"rankM":160,"idx3":121.1,"rank3":84,"states":["WI"],"tier":"reliable"},{"code":49340,"name":"Worcester, MA","idxM":115.1,"rankM":161,"idx3":115.1,"rank3":144,"states":["MA"],"tier":"large"},{"code":48540,"name":"Wheeling, WV-OH","idxM":114.8,"rankM":162,"idx3":115.6,"rank3":141,"states":["WV","OH"],"tier":"reliable"},{"code":19860,"name":"Dickinson, ND","idxM":114.8,"rankM":163,"idx3":113.8,"rank3":162,"states":["ND"],"tier":"published"},{"code":30140,"name":"Lebanon, PA","idxM":114.7,"rankM":164,"idx3":112.1,"rank3":182,"states":["PA"],"tier":"reliable"},{"code":38060,"name":"Phoenix-Mesa-Chandler, AZ","idxM":114.7,"rankM":165,"idx3":111.3,"rank3":199,"states":["AZ"],"tier":"large"},{"code":39300,"name":"Providence-Warwick, RI-MA","idxM":114.7,"rankM":166,"idx3":114.9,"rank3":147,"states":["RI","MA"],"tier":"large"},{"code":16220,"name":"Casper, WY","idxM":114.6,"rankM":167,"idx3":114.8,"rank3":150,"states":["WY"],"tier":"reliable"},{"code":26460,"name":"Hudson, NY","idxM":114.6,"rankM":168,"idx3":111,"rank3":207,"states":["NY"],"tier":"published"},{"code":11020,"name":"Altoona, PA","idxM":114.6,"rankM":169,"idx3":115.9,"rank3":139,"states":["PA"],"tier":"reliable"},{"code":21380,"name":"Emporia, KS","idxM":114.6,"rankM":170,"idx3":113.8,"rank3":163,"states":["KS"],"tier":"published"},{"code":49300,"name":"Wooster, OH","idxM":114.5,"rankM":171,"idx3":111.7,"rank3":189,"states":["OH"],"tier":"reliable"},{"code":27780,"name":"Johnstown, PA","idxM":114.4,"rankM":172,"idx3":112,"rank3":183,"states":["PA"],"tier":"reliable"},{"code":16940,"name":"Cheyenne, WY","idxM":114.4,"rankM":173,"idx3":112.6,"rank3":177,"states":["WY"],"tier":"reliable"},{"code":34060,"name":"Morgantown, WV","idxM":114.3,"rankM":174,"idx3":117.1,"rank3":127,"states":["WV"],"tier":"reliable"},{"code":47260,"name":"Virginia Beach-Chesapeake-Norfolk, VA-NC","idxM":114.2,"rankM":175,"idx3":112.8,"rank3":173,"states":["VA","NC"],"tier":"large"},{"code":17660,"name":"Coeur d'Alene, ID","idxM":114.2,"rankM":176,"idx3":116.2,"rank3":136,"states":["ID"],"tier":"reliable"},{"code":23900,"name":"Gettysburg, PA","idxM":114,"rankM":177,"idx3":112.7,"rank3":174,"states":["PA"],"tier":"reliable"},{"code":26340,"name":"Houghton, MI","idxM":113.9,"rankM":178,"idx3":115.8,"rank3":140,"states":["MI"],"tier":"published"},{"code":41780,"name":"Sandusky, OH","idxM":113.7,"rankM":179,"idx3":111.2,"rank3":201,"states":["OH"],"tier":"reliable"},{"code":32860,"name":"Menomonie, WI","idxM":113.6,"rankM":180,"idx3":113,"rank3":170,"states":["WI"],"tier":"published"},{"code":45780,"name":"Toledo, OH","idxM":113.5,"rankM":181,"idx3":111.5,"rank3":194,"states":["OH"],"tier":"large"},{"code":18820,"name":"Crawfordsville, IN","idxM":113.4,"rankM":182,"idx3":108.8,"rank3":252,"states":["IN"],"tier":"published"},{"code":15580,"name":"Butte-Silver Bow, MT","idxM":113.3,"rankM":183,"idx3":111.6,"rank3":191,"states":["MT"],"tier":"published"},{"code":47620,"name":"Warren, PA","idxM":113.3,"rankM":184,"idx3":105.2,"rank3":343,"states":["PA"],"tier":"published"},{"code":14020,"name":"Bloomington, IN","idxM":113.2,"rankM":185,"idx3":109.8,"rank3":227,"states":["IN"],"tier":"reliable"},{"code":46300,"name":"Twin Falls, ID","idxM":113.1,"rankM":186,"idx3":112.5,"rank3":178,"states":["ID"],"tier":"reliable"},{"code":44460,"name":"Steamboat Springs, CO","idxM":113,"rankM":187,"idx3":112.5,"rank3":179,"states":["CO"],"tier":"published"},{"code":41100,"name":"St. George, UT","idxM":113,"rankM":188,"idx3":113.7,"rank3":167,"states":["UT"],"tier":"reliable"},{"code":35980,"name":"Norwich-New London-Willimantic, CT","idxM":112.8,"rankM":189,"idx3":114.1,"rank3":156,"states":["CT"],"tier":"large"},{"code":28620,"name":"Kill Devil Hills, NC","idxM":112.7,"rankM":190,"idx3":112.7,"rank3":175,"states":["NC"],"tier":"published"},{"code":43580,"name":"Sioux City, IA-NE-SD","idxM":112.6,"rankM":191,"idx3":110.8,"rank3":211,"states":["IA","NE","SD"],"tier":"reliable"},{"code":36837,"name":"Ottawa, IL","idxM":112.6,"rankM":192,"idx3":107.9,"rank3":271,"states":["IL"],"tier":"reliable"},{"code":20420,"name":"Durango, CO","idxM":112.5,"rankM":193,"idx3":111.6,"rank3":192,"states":["CO"],"tier":"published"},{"code":48900,"name":"Wilmington, NC","idxM":112.4,"rankM":194,"idx3":111.3,"rank3":200,"states":["NC"],"tier":"large"},{"code":36340,"name":"Oil City, PA","idxM":112.3,"rankM":195,"idx3":106.7,"rank3":305,"states":["PA"],"tier":"published"},{"code":24600,"name":"Greencastle, IN","idxM":112.3,"rankM":196,"idx3":114.8,"rank3":151,"states":["IN"],"tier":"published"},{"code":11180,"name":"Ames, IA","idxM":112.2,"rankM":197,"idx3":110.5,"rank3":215,"states":["IA"],"tier":"reliable"},{"code":11680,"name":"Arkansas City-Winfield, KS","idxM":112.2,"rankM":198,"idx3":109.1,"rank3":240,"states":["KS"],"tier":"published"},{"code":47940,"name":"Waterloo-Cedar Falls, IA","idxM":112.2,"rankM":199,"idx3":108.8,"rank3":253,"states":["IA"],"tier":"reliable"},{"code":41860,"name":"San Francisco-Oakland-Fremont, CA","idxM":112.2,"rankM":200,"idx3":114,"rank3":158,"states":["CA"],"tier":"large"},{"code":10420,"name":"Akron, OH","idxM":112.2,"rankM":201,"idx3":109.1,"rank3":241,"states":["OH"],"tier":"large"},{"code":30380,"name":"Lewistown, PA","idxM":112.2,"rankM":202,"idx3":111.6,"rank3":193,"states":["PA"],"tier":"published"},{"code":43740,"name":"Somerset, PA","idxM":112.1,"rankM":203,"idx3":112,"rank3":184,"states":["PA"],"tier":"published"},{"code":27500,"name":"Janesville-Beloit, WI","idxM":112,"rankM":204,"idx3":109.7,"rank3":229,"states":["WI"],"tier":"reliable"},{"code":13340,"name":"Bellefontaine, OH","idxM":111.9,"rankM":205,"idx3":106,"rank3":327,"states":["OH"],"tier":"published"},{"code":25540,"name":"Hartford-West Hartford-East Hartford, CT","idxM":111.9,"rankM":206,"idx3":111.4,"rank3":197,"states":["CT"],"tier":"large"},{"code":45520,"name":"The Dalles, OR","idxM":111.8,"rankM":207,"idx3":109.9,"rank3":224,"states":["OR"],"tier":"published"},{"code":33580,"name":"Mitchell, SD","idxM":111.8,"rankM":208,"idx3":109.9,"rank3":225,"states":["SD"],"tier":"published"},{"code":17820,"name":"Colorado Springs, CO","idxM":111.7,"rankM":209,"idx3":113.8,"rank3":164,"states":["CO"],"tier":"large"},{"code":49660,"name":"Youngstown-Warren, OH","idxM":111.6,"rankM":210,"idx3":104.9,"rank3":349,"states":["OH"],"tier":"large"},{"code":35620,"name":"New York-Newark-Jersey City, NY-NJ","idxM":111.6,"rankM":211,"idx3":111.2,"rank3":202,"states":["NY","NJ"],"tier":"large"},{"code":26500,"name":"Huntingdon, PA","idxM":111.6,"rankM":212,"idx3":108.6,"rank3":257,"states":["PA"],"tier":"published"},{"code":19820,"name":"Detroit-Warren-Dearborn, MI","idxM":111.5,"rankM":213,"idx3":110.9,"rank3":209,"states":["MI"],"tier":"large"},{"code":42660,"name":"Seattle-Tacoma-Bellevue, WA","idxM":111.5,"rankM":214,"idx3":113.7,"rank3":168,"states":["WA"],"tier":"large"},{"code":32380,"name":"Mason City, IA","idxM":111.5,"rankM":215,"idx3":111.1,"rank3":205,"states":["IA"],"tier":"reliable"},{"code":47700,"name":"Warsaw, IN","idxM":111.5,"rankM":216,"idx3":107.7,"rank3":276,"states":["IN"],"tier":"reliable"},{"code":25850,"name":"Hermitage, PA","idxM":111.3,"rankM":217,"idx3":106.8,"rank3":300,"states":["PA"],"tier":"reliable"},{"code":41140,"name":"St. Joseph, MO-KS","idxM":111.3,"rankM":218,"idx3":110.2,"rank3":220,"states":["MO","KS"],"tier":"reliable"},{"code":26820,"name":"Idaho Falls, ID","idxM":111.2,"rankM":219,"idx3":112,"rank3":185,"states":["ID"],"tier":"reliable"},{"code":35440,"name":"Newport, OR","idxM":111.2,"rankM":220,"idx3":110.3,"rank3":218,"states":["OR"],"tier":"published"},{"code":25580,"name":"Hastings, NE","idxM":111.2,"rankM":221,"idx3":112.7,"rank3":176,"states":["NE"],"tier":"published"},{"code":16380,"name":"Celina, OH","idxM":111.2,"rankM":222,"idx3":109.1,"rank3":242,"states":["OH"],"tier":"published"},{"code":46540,"name":"Utica-Rome, NY","idxM":111,"rankM":223,"idx3":106.6,"rank3":307,"states":["NY"],"tier":"reliable"},{"code":16740,"name":"Charlotte-Concord-Gastonia, NC-SC","idxM":110.9,"rankM":224,"idx3":110.2,"rank3":221,"states":["NC","SC"],"tier":"large"},{"code":19580,"name":"Defiance, OH","idxM":110.7,"rankM":225,"idx3":110.1,"rank3":222,"states":["OH"],"tier":"published"},{"code":46780,"name":"Van Wert, OH","idxM":110.7,"rankM":226,"idx3":103.2,"rank3":378,"states":["OH"],"tier":"published"},{"code":10900,"name":"Allentown-Bethlehem-Easton, PA-NJ","idxM":110.6,"rankM":227,"idx3":108.1,"rank3":265,"states":["PA","NJ"],"tier":"large"},{"code":42200,"name":"Santa Maria-Santa Barbara, CA","idxM":110.6,"rankM":228,"idx3":113,"rank3":171,"states":["CA"],"tier":"reliable"},{"code":15740,"name":"Cambridge, OH","idxM":110.5,"rankM":229,"idx3":110.5,"rank3":216,"states":["OH"],"tier":"published"},{"code":31140,"name":"Louisville/Jefferson County, KY-IN","idxM":110.5,"rankM":230,"idx3":110.1,"rank3":223,"states":["KY","IN"],"tier":"large"},{"code":13260,"name":"Bedford, IN","idxM":110.3,"rankM":231,"idx3":108.9,"rank3":247,"states":["IN"],"tier":"published"},{"code":19340,"name":"Davenport-Moline-Rock Island, IA-IL","idxM":110.2,"rankM":232,"idx3":108.1,"rank3":266,"states":["IA","IL"],"tier":"large"},{"code":44060,"name":"Spokane-Spokane Valley, WA","idxM":110.2,"rankM":233,"idx3":110.8,"rank3":212,"states":["WA"],"tier":"large"},{"code":10460,"name":"Alamogordo, NM","idxM":110.1,"rankM":234,"idx3":112,"rank3":186,"states":["NM"],"tier":"published"},{"code":29660,"name":"Laramie, WY","idxM":110.1,"rankM":235,"idx3":113.8,"rank3":165,"states":["WY"],"tier":"published"},{"code":26220,"name":"Hood River, OR","idxM":110,"rankM":236,"idx3":111.9,"rank3":187,"states":["OR"],"tier":"published"},{"code":20780,"name":"Edwards, CO","idxM":110,"rankM":237,"idx3":111,"rank3":208,"states":["CO"],"tier":"reliable"},{"code":48580,"name":"Whitewater-Elkhorn, WI","idxM":110,"rankM":238,"idx3":109.3,"rank3":235,"states":["WI"],"tier":"reliable"},{"code":27940,"name":"Juneau, AK","idxM":109.9,"rankM":239,"idx3":111.5,"rank3":195,"states":["AK"],"tier":"published"},{"code":12860,"name":"Batavia, NY","idxM":109.9,"rankM":240,"idx3":105.2,"rank3":344,"states":["NY"],"tier":"reliable"},{"code":44180,"name":"Springfield, MO","idxM":109.9,"rankM":241,"idx3":111.1,"rank3":206,"states":["MO"],"tier":"large"},{"code":41740,"name":"San Diego-Chula Vista-Carlsbad, CA","idxM":109.8,"rankM":242,"idx3":109.6,"rank3":231,"states":["CA"],"tier":"large"},{"code":37900,"name":"Peoria, IL","idxM":109.8,"rankM":243,"idx3":109.7,"rank3":230,"states":["IL"],"tier":"large"},{"code":41760,"name":"Sandpoint, ID","idxM":109.8,"rankM":244,"idx3":110.3,"rank3":219,"states":["ID"],"tier":"published"},{"code":20820,"name":"Effingham, IL","idxM":109.7,"rankM":245,"idx3":112.3,"rank3":181,"states":["IL"],"tier":"published"},{"code":15620,"name":"Cadillac, MI","idxM":109.7,"rankM":246,"idx3":109.1,"rank3":243,"states":["MI"],"tier":"published"},{"code":42300,"name":"Sault Ste. Marie, MI","idxM":109.7,"rankM":247,"idx3":113.1,"rank3":169,"states":["MI"],"tier":"published"},{"code":45340,"name":"Taos, NM","idxM":109.6,"rankM":248,"idx3":110.8,"rank3":213,"states":["NM"],"tier":"published"},{"code":16580,"name":"Champaign-Urbana, IL","idxM":109.5,"rankM":249,"idx3":107.5,"rank3":285,"states":["IL"],"tier":"reliable"},{"code":31220,"name":"Ludington, MI","idxM":109.5,"rankM":250,"idx3":108.9,"rank3":248,"states":["MI"],"tier":"published"},{"code":39740,"name":"Reading, PA","idxM":109.3,"rankM":251,"idx3":109,"rank3":245,"states":["PA"],"tier":"large"},{"code":18880,"name":"Crestview-Fort Walton Beach-Destin, FL","idxM":109.3,"rankM":252,"idx3":112.5,"rank3":180,"states":["FL"],"tier":"large"},{"code":32260,"name":"Marshalltown, IA","idxM":109.2,"rankM":253,"idx3":106,"rank3":328,"states":["IA"],"tier":"published"},{"code":31900,"name":"Mansfield, OH","idxM":109.1,"rankM":254,"idx3":109,"rank3":246,"states":["OH"],"tier":"reliable"},{"code":45660,"name":"Tiffin, OH","idxM":109,"rankM":255,"idx3":106.6,"rank3":308,"states":["OH"],"tier":"published"},{"code":43220,"name":"Shelton, WA","idxM":108.9,"rankM":256,"idx3":109.2,"rank3":239,"states":["WA"],"tier":"published"},{"code":30500,"name":"Lexington Park, MD","idxM":108.9,"rankM":257,"idx3":106.9,"rank3":295,"states":["MD"],"tier":"reliable"},{"code":46500,"name":"Urbana, OH","idxM":108.8,"rankM":258,"idx3":108.3,"rank3":264,"states":["OH"],"tier":"published"},{"code":24020,"name":"Glens Falls, NY","idxM":108.8,"rankM":259,"idx3":111.2,"rank3":203,"states":["NY"],"tier":"reliable"},{"code":11740,"name":"Ashland, OH","idxM":108.8,"rankM":260,"idx3":108.9,"rank3":249,"states":["OH"],"tier":"published"},{"code":28500,"name":"Kerrville, TX","idxM":108.7,"rankM":261,"idx3":109.3,"rank3":236,"states":["TX"],"tier":"published"},{"code":42540,"name":"Scranton--Wilkes-Barre, PA","idxM":108.7,"rankM":262,"idx3":106.2,"rank3":319,"states":["PA"],"tier":"large"},{"code":49460,"name":"Yankton, SD","idxM":108.7,"rankM":263,"idx3":102.6,"rank3":391,"states":["SD"],"tier":"published"},{"code":24500,"name":"Great Falls, MT","idxM":108.5,"rankM":264,"idx3":111.2,"rank3":204,"states":["MT"],"tier":"reliable"},{"code":45460,"name":"Terre Haute, IN","idxM":108.5,"rankM":265,"idx3":109.4,"rank3":233,"states":["IN"],"tier":"reliable"},{"code":26620,"name":"Huntsville, AL","idxM":108.5,"rankM":266,"idx3":108.9,"rank3":250,"states":["AL"],"tier":"large"},{"code":13980,"name":"Blacksburg-Christiansburg-Radford, VA","idxM":108.5,"rankM":267,"idx3":109.3,"rank3":237,"states":["VA"],"tier":"reliable"},{"code":11100,"name":"Amarillo, TX","idxM":108.4,"rankM":268,"idx3":106.9,"rank3":296,"states":["TX"],"tier":"reliable"},{"code":22220,"name":"Fayetteville-Springdale-Rogers, AR","idxM":108.3,"rankM":269,"idx3":108.5,"rank3":259,"states":["AR"],"tier":"large"},{"code":29620,"name":"Lansing-East Lansing, MI","idxM":108.3,"rankM":270,"idx3":110.4,"rank3":217,"states":["MI"],"tier":"large"},{"code":42340,"name":"Savannah, GA","idxM":108.3,"rankM":271,"idx3":108,"rank3":268,"states":["GA"],"tier":"large"},{"code":32020,"name":"Marion, OH","idxM":108.2,"rankM":272,"idx3":107.5,"rank3":286,"states":["OH"],"tier":"published"},{"code":23380,"name":"Fremont, OH","idxM":108.2,"rankM":273,"idx3":106.8,"rank3":301,"states":["OH"],"tier":"published"},{"code":41260,"name":"St. Marys, PA","idxM":108.1,"rankM":274,"idx3":99.2,"rank3":467,"states":["PA"],"tier":"published"},{"code":21780,"name":"Evansville, IN","idxM":108.1,"rankM":275,"idx3":106.2,"rank3":320,"states":["IN"],"tier":"large"},{"code":10300,"name":"Adrian, MI","idxM":108.1,"rankM":276,"idx3":106.9,"rank3":297,"states":["MI"],"tier":"reliable"},{"code":49780,"name":"Zanesville, OH","idxM":108,"rankM":277,"idx3":106.7,"rank3":306,"states":["OH"],"tier":"reliable"},{"code":36020,"name":"Oak Harbor, WA","idxM":108,"rankM":278,"idx3":108.6,"rank3":258,"states":["WA"],"tier":"published"},{"code":33940,"name":"Montrose, CO","idxM":107.9,"rankM":279,"idx3":111.5,"rank3":196,"states":["CO"],"tier":"published"},{"code":24300,"name":"Grand Junction, CO","idxM":107.9,"rankM":280,"idx3":110.9,"rank3":210,"states":["CO"],"tier":"reliable"},{"code":36840,"name":"Ottawa, KS","idxM":107.9,"rankM":281,"idx3":106.1,"rank3":322,"states":["KS"],"tier":"published"},{"code":26540,"name":"Huntington, IN","idxM":107.8,"rankM":282,"idx3":106.2,"rank3":321,"states":["IN"],"tier":"published"},{"code":22800,"name":"Fort Madison, IA","idxM":107.8,"rankM":283,"idx3":104.8,"rank3":351,"states":["IA"],"tier":"published"},{"code":48060,"name":"Watertown-Fort Drum, NY","idxM":107.8,"rankM":284,"idx3":102,"rank3":404,"states":["NY"],"tier":"reliable"},{"code":15420,"name":"Burley, ID","idxM":107.8,"rankM":285,"idx3":103.8,"rank3":372,"states":["ID"],"tier":"published"},{"code":17860,"name":"Columbia, MO","idxM":107.7,"rankM":286,"idx3":113.9,"rank3":160,"states":["MO"],"tier":"reliable"},{"code":43380,"name":"Sidney, OH","idxM":107.7,"rankM":287,"idx3":109.3,"rank3":238,"states":["OH"],"tier":"published"},{"code":14620,"name":"Bradford, PA","idxM":107.6,"rankM":288,"idx3":101.9,"rank3":406,"states":["PA"],"tier":"published"},{"code":19980,"name":"Dodge City, KS","idxM":107.6,"rankM":289,"idx3":108.5,"rank3":260,"states":["KS"],"tier":"published"},{"code":11420,"name":"Angola, IN","idxM":107.6,"rankM":290,"idx3":105.3,"rank3":339,"states":["IN"],"tier":"published"},{"code":26980,"name":"Iowa City, IA","idxM":107.5,"rankM":291,"idx3":107.7,"rank3":277,"states":["IA"],"tier":"reliable"},{"code":33620,"name":"Moberly, MO","idxM":107.5,"rankM":292,"idx3":109.6,"rank3":232,"states":["MO"],"tier":"published"},{"code":36420,"name":"Oklahoma City, OK","idxM":107.4,"rankM":293,"idx3":107.7,"rank3":278,"states":["OK"],"tier":"large"},{"code":44420,"name":"Staunton-Stuarts Draft, VA","idxM":107.4,"rankM":294,"idx3":109.4,"rank3":234,"states":["VA"],"tier":"reliable"},{"code":15940,"name":"Canton-Massillon, OH","idxM":107.3,"rankM":295,"idx3":106.9,"rank3":298,"states":["OH"],"tier":"large"},{"code":28880,"name":"Kiryas Joel-Poughkeepsie-Newburgh, NY","idxM":107.2,"rankM":296,"idx3":104.4,"rank3":362,"states":["NY"],"tier":"large"},{"code":14740,"name":"Bremerton-Silverdale-Port Orchard, WA","idxM":107.2,"rankM":297,"idx3":105.3,"rank3":340,"states":["WA"],"tier":"reliable"},{"code":12580,"name":"Baltimore-Columbia-Towson, MD","idxM":107.2,"rankM":298,"idx3":106.1,"rank3":323,"states":["MD"],"tier":"large"},{"code":22700,"name":"Fort Dodge, IA","idxM":107.1,"rankM":299,"idx3":106.3,"rank3":315,"states":["IA"],"tier":"published"},{"code":25500,"name":"Harrisonburg, VA","idxM":107.1,"rankM":300,"idx3":105.9,"rank3":332,"states":["VA"],"tier":"reliable"},{"code":27300,"name":"Jacksonville, IL","idxM":107.1,"rankM":301,"idx3":105.6,"rank3":336,"states":["IL"],"tier":"published"},{"code":16260,"name":"Cedar City, UT","idxM":107.1,"rankM":302,"idx3":106.8,"rank3":302,"states":["UT"],"tier":"published"},{"code":29780,"name":"Las Vegas, NM","idxM":107.1,"rankM":303,"idx3":103.1,"rank3":383,"states":["NM"],"tier":"published"},{"code":14720,"name":"Breckenridge, CO","idxM":107.1,"rankM":304,"idx3":108.5,"rank3":261,"states":["CO"],"tier":"reliable"},{"code":37740,"name":"Payson, AZ","idxM":107,"rankM":305,"idx3":110.7,"rank3":214,"states":["AZ"],"tier":"published"},{"code":35820,"name":"North Platte, NE","idxM":106.9,"rankM":306,"idx3":108.8,"rank3":254,"states":["NE"],"tier":"published"},{"code":14380,"name":"Boone, NC","idxM":106.9,"rankM":307,"idx3":107.6,"rank3":281,"states":["NC"],"tier":"reliable"},{"code":16500,"name":"Centralia, WA","idxM":106.9,"rankM":308,"idx3":109.8,"rank3":228,"states":["WA"],"tier":"published"},{"code":26740,"name":"Hutchinson, KS","idxM":106.8,"rankM":309,"idx3":107.5,"rank3":287,"states":["KS"],"tier":"published"},{"code":23940,"name":"Gillette, WY","idxM":106.8,"rankM":310,"idx3":107.5,"rank3":288,"states":["WY"],"tier":"published"},{"code":25300,"name":"Hannibal, MO","idxM":106.8,"rankM":311,"idx3":104.6,"rank3":357,"states":["MO"],"tier":"published"},{"code":29940,"name":"Lawrence, KS","idxM":106.7,"rankM":312,"idx3":105.3,"rank3":341,"states":["KS"],"tier":"reliable"},{"code":12780,"name":"Bartlesville, OK","idxM":106.7,"rankM":313,"idx3":107.8,"rank3":274,"states":["OK"],"tier":"published"},{"code":39580,"name":"Raleigh-Cary, NC","idxM":106.6,"rankM":314,"idx3":106,"rank3":329,"states":["NC"],"tier":"large"},{"code":28020,"name":"Kalamazoo-Portage, MI","idxM":106.6,"rankM":315,"idx3":107.5,"rank3":289,"states":["MI"],"tier":"reliable"},{"code":49020,"name":"Winchester, VA-WV","idxM":106.6,"rankM":316,"idx3":107.9,"rank3":272,"states":["VA","WV"],"tier":"reliable"},{"code":27540,"name":"Jasper, IN","idxM":106.5,"rankM":317,"idx3":105.1,"rank3":345,"states":["IN"],"tier":"published"},{"code":17220,"name":"Clarksburg, WV","idxM":106.5,"rankM":318,"idx3":106.5,"rank3":309,"states":["WV"],"tier":"reliable"},{"code":15100,"name":"Brookings, SD","idxM":106.5,"rankM":319,"idx3":109.1,"rank3":244,"states":["SD"],"tier":"published"},{"code":30460,"name":"Lexington-Fayette, KY","idxM":106.4,"rankM":320,"idx3":103.2,"rank3":379,"states":["KY"],"tier":"large"},{"code":41940,"name":"San Jose-Sunnyvale-Santa Clara, CA","idxM":106.3,"rankM":321,"idx3":107,"rank3":291,"states":["CA"],"tier":"large"},{"code":21660,"name":"Eugene-Springfield, OR","idxM":106.3,"rankM":322,"idx3":108.5,"rank3":262,"states":["OR"],"tier":"reliable"},{"code":43780,"name":"South Bend-Mishawaka, IN-MI","idxM":106.3,"rankM":323,"idx3":107,"rank3":292,"states":["IN","MI"],"tier":"large"},{"code":22380,"name":"Flagstaff, AZ","idxM":106.2,"rankM":324,"idx3":107.8,"rank3":275,"states":["AZ"],"tier":"reliable"},{"code":48260,"name":"Weirton-Steubenville, WV-OH","idxM":106.2,"rankM":325,"idx3":106.5,"rank3":310,"states":["WV","OH"],"tier":"reliable"},{"code":14940,"name":"Brigham City, UT-ID","idxM":106.2,"rankM":326,"idx3":105.5,"rank3":338,"states":["UT","ID"],"tier":"published"},{"code":40700,"name":"Roseburg, OR","idxM":106.1,"rankM":327,"idx3":106.8,"rank3":303,"states":["OR"],"tier":"reliable"},{"code":24860,"name":"Greenville-Anderson-Greer, SC","idxM":106.1,"rankM":328,"idx3":106.4,"rank3":312,"states":["SC"],"tier":"large"},{"code":48200,"name":"Waynesville, NC","idxM":106.1,"rankM":329,"idx3":109.9,"rank3":226,"states":["NC"],"tier":"published"},{"code":38260,"name":"Pittsburg, KS","idxM":106.1,"rankM":330,"idx3":104,"rank3":369,"states":["KS"],"tier":"published"},{"code":35940,"name":"Norwalk, OH","idxM":106,"rankM":331,"idx3":104.1,"rank3":367,"states":["OH"],"tier":"published"},{"code":19940,"name":"Dixon, IL","idxM":106,"rankM":332,"idx3":102.6,"rank3":392,"states":["IL"],"tier":"published"},{"code":21220,"name":"Elko, NV","idxM":106,"rankM":333,"idx3":108,"rank3":269,"states":["NV"],"tier":"reliable"},{"code":14500,"name":"Boulder, CO","idxM":105.9,"rankM":334,"idx3":102.8,"rank3":387,"states":["CO"],"tier":"large"},{"code":37940,"name":"Peru, IN","idxM":105.9,"rankM":335,"idx3":103.2,"rank3":380,"states":["IN"],"tier":"published"},{"code":40180,"name":"Riverton, WY","idxM":105.9,"rankM":336,"idx3":108.8,"rank3":255,"states":["WY"],"tier":"published"},{"code":20180,"name":"DuBois, PA","idxM":105.8,"rankM":337,"idx3":102.2,"rank3":398,"states":["PA"],"tier":"reliable"},{"code":16860,"name":"Chattanooga, TN-GA","idxM":105.8,"rankM":338,"idx3":106.4,"rank3":313,"states":["TN","GA"],"tier":"large"},{"code":22660,"name":"Fort Collins-Loveland, CO","idxM":105.8,"rankM":339,"idx3":108.5,"rank3":263,"states":["CO"],"tier":"large"},{"code":18020,"name":"Columbus, IN","idxM":105.8,"rankM":340,"idx3":104.5,"rank3":359,"states":["IN"],"tier":"reliable"},{"code":48700,"name":"Williamsport, PA","idxM":105.7,"rankM":341,"idx3":99.5,"rank3":452,"states":["PA"],"tier":"reliable"},{"code":34700,"name":"Muscatine, IA","idxM":105.7,"rankM":342,"idx3":103.8,"rank3":373,"states":["IA"],"tier":"published"},{"code":39980,"name":"Richmond, IN","idxM":105.7,"rankM":343,"idx3":105.1,"rank3":346,"states":["IN"],"tier":"reliable"},{"code":21980,"name":"Fallon, NV","idxM":105.6,"rankM":344,"idx3":104.1,"rank3":368,"states":["NV"],"tier":"published"},{"code":46060,"name":"Tucson, AZ","idxM":105.6,"rankM":345,"idx3":104.6,"rank3":358,"states":["AZ"],"tier":"large"},{"code":14010,"name":"Bloomington, IL","idxM":105.6,"rankM":346,"idx3":106.1,"rank3":324,"states":["IL"],"tier":"reliable"},{"code":26090,"name":"Holland, MI","idxM":105.5,"rankM":347,"idx3":101.5,"rank3":411,"states":["MI"],"tier":"reliable"},{"code":42740,"name":"Sedalia, MO","idxM":105.5,"rankM":348,"idx3":104.5,"rank3":360,"states":["MO"],"tier":"published"},{"code":13820,"name":"Birmingham, AL","idxM":105.5,"rankM":349,"idx3":105,"rank3":347,"states":["AL"],"tier":"large"},{"code":38180,"name":"Pierre, SD","idxM":105.5,"rankM":350,"idx3":102.7,"rank3":389,"states":["SD"],"tier":"published"},{"code":36580,"name":"Oneonta, NY","idxM":105.5,"rankM":351,"idx3":100.9,"rank3":423,"states":["NY"],"tier":"reliable"},{"code":18500,"name":"Corning, NY","idxM":105.4,"rankM":352,"idx3":96.7,"rank3":524,"states":["NY"],"tier":"reliable"},{"code":35220,"name":"New Castle, IN","idxM":105.4,"rankM":353,"idx3":99.9,"rank3":444,"states":["IN"],"tier":"published"},{"code":24460,"name":"Great Bend, KS","idxM":105.4,"rankM":354,"idx3":106.3,"rank3":316,"states":["KS"],"tier":"published"},{"code":28340,"name":"Kendallville, IN","idxM":105.4,"rankM":355,"idx3":106.8,"rank3":304,"states":["IN"],"tier":"published"},{"code":14860,"name":"Bridgeport-Stamford-Norwalk, CT","idxM":105.3,"rankM":356,"idx3":105.8,"rank3":334,"states":["CT"],"tier":"large"},{"code":23820,"name":"Gardnerville Ranchos, NV-CA","idxM":105.2,"rankM":357,"idx3":105,"rank3":348,"states":["NV","CA"],"tier":"published"},{"code":47340,"name":"Wabash, IN","idxM":105.1,"rankM":358,"idx3":101.9,"rank3":407,"states":["IN"],"tier":"published"},{"code":25700,"name":"Hays, KS","idxM":105.1,"rankM":359,"idx3":107,"rank3":293,"states":["KS"],"tier":"published"},{"code":33100,"name":"Miami-Fort Lauderdale-West Palm Beach, FL","idxM":105,"rankM":360,"idx3":104.8,"rank3":352,"states":["FL"],"tier":"large"},{"code":10980,"name":"Alpena, MI","idxM":105,"rankM":361,"idx3":106,"rank3":330,"states":["MI"],"tier":"published"},{"code":15860,"name":"Cañon City, CO","idxM":105,"rankM":362,"idx3":107.6,"rank3":282,"states":["CO"],"tier":"published"},{"code":39540,"name":"Racine-Mount Pleasant, WI","idxM":104.9,"rankM":363,"idx3":103.1,"rank3":384,"states":["WI"],"tier":"reliable"},{"code":32700,"name":"McPherson, KS","idxM":104.8,"rankM":364,"idx3":105.7,"rank3":335,"states":["KS"],"tier":"published"},{"code":34580,"name":"Mount Vernon-Anacortes, WA","idxM":104.8,"rankM":365,"idx3":103.8,"rank3":374,"states":["WA"],"tier":"reliable"},{"code":21900,"name":"Fairmont, WV","idxM":104.8,"rankM":366,"idx3":104,"rank3":370,"states":["WV"],"tier":"published"},{"code":16100,"name":"Carlsbad-Artesia, NM","idxM":104.7,"rankM":367,"idx3":104.3,"rank3":363,"states":["NM"],"tier":"reliable"},{"code":32390,"name":"Massena-Ogdensburg, NY","idxM":104.6,"rankM":368,"idx3":97,"rank3":517,"states":["NY"],"tier":"reliable"},{"code":22780,"name":"Fort Leonard Wood, MO","idxM":104.6,"rankM":369,"idx3":107.4,"rank3":290,"states":["MO"],"tier":"published"},{"code":33900,"name":"Monticello, IN","idxM":104.5,"rankM":370,"idx3":106.3,"rank3":317,"states":["IN"],"tier":"published"},{"code":12180,"name":"Auburn, NY","idxM":104.3,"rankM":371,"idx3":94.2,"rank3":569,"states":["NY"],"tier":"published"},{"code":28860,"name":"Kirksville, MO","idxM":104.1,"rankM":372,"idx3":104.8,"rank3":353,"states":["MO"],"tier":"published"},{"code":31980,"name":"Marion, IN","idxM":104.1,"rankM":373,"idx3":100.9,"rank3":424,"states":["IN"],"tier":"published"},{"code":30900,"name":"Logansport, IN","idxM":104.1,"rankM":374,"idx3":101.6,"rank3":410,"states":["IN"],"tier":"published"},{"code":35840,"name":"North Port-Bradenton-Sarasota, FL","idxM":104.1,"rankM":375,"idx3":102.7,"rank3":390,"states":["FL"],"tier":"large"},{"code":48780,"name":"Williston, ND","idxM":104,"rankM":376,"idx3":102.3,"rank3":397,"states":["ND"],"tier":"reliable"},{"code":13220,"name":"Beckley, WV","idxM":104,"rankM":377,"idx3":107.6,"rank3":283,"states":["WV"],"tier":"reliable"},{"code":16620,"name":"Charleston, WV","idxM":103.9,"rankM":378,"idx3":104.3,"rank3":364,"states":["WV"],"tier":"reliable"},{"code":17540,"name":"Clinton, IA","idxM":103.9,"rankM":379,"idx3":103.9,"rank3":371,"states":["IA"],"tier":"published"},{"code":47660,"name":"Warrensburg, MO","idxM":103.8,"rankM":380,"idx3":104.3,"rank3":365,"states":["MO"],"tier":"published"},{"code":38820,"name":"Port Angeles, WA","idxM":103.8,"rankM":381,"idx3":106.4,"rank3":314,"states":["WA"],"tier":"published"},{"code":13380,"name":"Bellingham, WA","idxM":103.8,"rankM":382,"idx3":104.7,"rank3":355,"states":["WA"],"tier":"reliable"},{"code":29020,"name":"Kokomo, IN","idxM":103.8,"rankM":383,"idx3":100.5,"rank3":431,"states":["IN"],"tier":"reliable"},{"code":23340,"name":"Fremont, NE","idxM":103.8,"rankM":384,"idx3":105.9,"rank3":333,"states":["NE"],"tier":"published"},{"code":45860,"name":"Torrington, CT","idxM":103.7,"rankM":385,"idx3":99.8,"rank3":447,"states":["CT"],"tier":"reliable"},{"code":24820,"name":"Greenville, OH","idxM":103.7,"rankM":386,"idx3":107,"rank3":294,"states":["OH"],"tier":"published"},{"code":44220,"name":"Springfield, OH","idxM":103.7,"rankM":387,"idx3":104.3,"rank3":366,"states":["OH"],"tier":"reliable"},{"code":39500,"name":"Quincy, IL-MO","idxM":103.6,"rankM":388,"idx3":103.3,"rank3":377,"states":["IL","MO"],"tier":"reliable"},{"code":33910,"name":"Monticello, NY","idxM":103.6,"rankM":389,"idx3":100.4,"rank3":434,"states":["NY"],"tier":"published"},{"code":17740,"name":"Coldwater, MI","idxM":103.6,"rankM":390,"idx3":104.5,"rank3":361,"states":["MI"],"tier":"published"},{"code":43320,"name":"Show Low, AZ","idxM":103.6,"rankM":391,"idx3":105.6,"rank3":337,"states":["AZ"],"tier":"reliable"},{"code":41620,"name":"Salt Lake City-Murray, UT","idxM":103.6,"rankM":392,"idx3":106.9,"rank3":299,"states":["UT"],"tier":"large"},{"code":34540,"name":"Mount Vernon, OH","idxM":103.4,"rankM":393,"idx3":107.6,"rank3":284,"states":["OH"],"tier":"published"},{"code":31380,"name":"Macomb, IL","idxM":103.4,"rankM":394,"idx3":102,"rank3":405,"states":["IL"],"tier":"published"},{"code":42580,"name":"Seaford, DE","idxM":103.4,"rankM":395,"idx3":105.3,"rank3":342,"states":["DE"],"tier":"reliable"},{"code":31080,"name":"Los Angeles-Long Beach-Anaheim, CA","idxM":103.3,"rankM":396,"idx3":104.7,"rank3":356,"states":["CA"],"tier":"large"},{"code":42020,"name":"San Luis Obispo-Paso Robles, CA","idxM":103.3,"rankM":397,"idx3":107.7,"rank3":279,"states":["CA"],"tier":"reliable"},{"code":34740,"name":"Muskegon-Norton Shores, MI","idxM":103.2,"rankM":398,"idx3":102.5,"rank3":394,"states":["MI"],"tier":"reliable"},{"code":18660,"name":"Cortland, NY","idxM":103.1,"rankM":399,"idx3":100.9,"rank3":425,"states":["NY"],"tier":"published"},{"code":21020,"name":"Elizabeth City, NC","idxM":103,"rankM":400,"idx3":106.1,"rank3":325,"states":["NC"],"tier":"published"},{"code":37620,"name":"Parkersburg-Vienna, WV","idxM":102.9,"rankM":401,"idx3":106.1,"rank3":326,"states":["WV"],"tier":"reliable"},{"code":25860,"name":"Hickory-Lenoir-Morganton, NC","idxM":102.8,"rankM":402,"idx3":103.1,"rank3":385,"states":["NC"],"tier":"large"},{"code":14100,"name":"Bloomsburg-Berwick, PA","idxM":102.7,"rankM":403,"idx3":97.2,"rank3":513,"states":["PA"],"tier":"reliable"},{"code":39060,"name":"Pottsville, PA","idxM":102.7,"rankM":404,"idx3":96.1,"rank3":532,"states":["PA"],"tier":"reliable"},{"code":42980,"name":"Seymour, IN","idxM":102.7,"rankM":405,"idx3":99.7,"rank3":449,"states":["IN"],"tier":"published"},{"code":21700,"name":"Eureka-Arcata, CA","idxM":102.6,"rankM":406,"idx3":99.1,"rank3":469,"states":["CA"],"tier":"reliable"},{"code":21180,"name":"Elkins, WV","idxM":102.6,"rankM":407,"idx3":107.7,"rank3":280,"states":["WV"],"tier":"published"},{"code":23140,"name":"Frankfort, IN","idxM":102.6,"rankM":408,"idx3":99.9,"rank3":445,"states":["IN"],"tier":"published"},{"code":12140,"name":"Auburn, IN","idxM":102.6,"rankM":409,"idx3":100.9,"rank3":426,"states":["IN"],"tier":"published"},{"code":37800,"name":"Pella, IA","idxM":102.5,"rankM":410,"idx3":100.7,"rank3":430,"states":["IA"],"tier":"published"},{"code":22820,"name":"Fort Morgan, CO","idxM":102.4,"rankM":411,"idx3":100.5,"rank3":432,"states":["CO"],"tier":"published"},{"code":42220,"name":"Santa Rosa-Petaluma, CA","idxM":102.2,"rankM":412,"idx3":108,"rank3":270,"states":["CA"],"tier":"large"},{"code":13780,"name":"Binghamton, NY","idxM":102.2,"rankM":413,"idx3":101.1,"rank3":418,"states":["NY"],"tier":"reliable"},{"code":21540,"name":"Escanaba, MI","idxM":102,"rankM":414,"idx3":103.5,"rank3":375,"states":["MI"],"tier":"published"},{"code":16020,"name":"Cape Girardeau, MO-IL","idxM":102,"rankM":415,"idx3":98.6,"rank3":485,"states":["MO","IL"],"tier":"reliable"},{"code":41700,"name":"San Antonio-New Braunfels, TX","idxM":101.9,"rankM":416,"idx3":100.9,"rank3":427,"states":["TX"],"tier":"large"},{"code":44140,"name":"Springfield, MA","idxM":101.9,"rankM":417,"idx3":102.1,"rank3":401,"states":["MA"],"tier":"large"},{"code":34180,"name":"Moses Lake, WA","idxM":101.8,"rankM":418,"idx3":100.1,"rank3":440,"states":["WA"],"tier":"reliable"},{"code":40620,"name":"Rolla, MO","idxM":101.7,"rankM":419,"idx3":103.2,"rank3":381,"states":["MO"],"tier":"published"},{"code":22300,"name":"Findlay, OH","idxM":101.7,"rankM":420,"idx3":99.8,"rank3":448,"states":["OH"],"tier":"reliable"},{"code":27460,"name":"Jamestown-Dunkirk, NY","idxM":101.6,"rankM":421,"idx3":95.1,"rank3":555,"states":["NY"],"tier":"reliable"},{"code":40300,"name":"Rochelle, IL","idxM":101.5,"rankM":422,"idx3":101.8,"rank3":408,"states":["IL"],"tier":"published"},{"code":30860,"name":"Logan, UT-ID","idxM":101.5,"rankM":423,"idx3":99,"rank3":471,"states":["UT","ID"],"tier":"reliable"},{"code":10480,"name":"Alamosa, CO","idxM":101.5,"rankM":424,"idx3":102.2,"rank3":399,"states":["CO"],"tier":"published"},{"code":34420,"name":"Mount Pleasant, TX","idxM":101.5,"rankM":425,"idx3":98.5,"rank3":489,"states":["TX"],"tier":"published"},{"code":49080,"name":"Winnemucca, NV","idxM":101.4,"rankM":426,"idx3":104.8,"rank3":354,"states":["NV"],"tier":"published"},{"code":38500,"name":"Plymouth, IN","idxM":101.4,"rankM":427,"idx3":103.5,"rank3":376,"states":["IN"],"tier":"published"},{"code":17900,"name":"Columbia, SC","idxM":101.4,"rankM":428,"idx3":99.3,"rank3":462,"states":["SC"],"tier":"large"},{"code":40540,"name":"Rock Springs, WY","idxM":101.3,"rankM":429,"idx3":102.8,"rank3":388,"states":["WY"],"tier":"published"},{"code":38540,"name":"Pocatello, ID","idxM":101.2,"rankM":430,"idx3":102.1,"rank3":402,"states":["ID"],"tier":"reliable"},{"code":17780,"name":"College Station-Bryan, TX","idxM":101.2,"rankM":431,"idx3":100.3,"rank3":436,"states":["TX"],"tier":"reliable"},{"code":11900,"name":"Athens, OH","idxM":101.2,"rankM":432,"idx3":100.8,"rank3":429,"states":["OH"],"tier":"published"},{"code":33140,"name":"Michigan City-La Porte, IN","idxM":101.1,"rankM":433,"idx3":101.5,"rank3":412,"states":["IN"],"tier":"reliable"},{"code":13700,"name":"Big Spring, TX","idxM":101.1,"rankM":434,"idx3":99.3,"rank3":463,"states":["TX"],"tier":"published"},{"code":36460,"name":"Olean, NY","idxM":101.1,"rankM":435,"idx3":93.6,"rank3":582,"states":["NY"],"tier":"published"},{"code":18580,"name":"Corpus Christi, TX","idxM":101.1,"rankM":436,"idx3":102.2,"rank3":400,"states":["TX"],"tier":"large"},{"code":42380,"name":"Sayre, PA","idxM":101,"rankM":437,"idx3":94.8,"rank3":558,"states":["PA"],"tier":"published"},{"code":29470,"name":"Lake of the Woods, VA","idxM":101,"rankM":438,"idx3":101.8,"rank3":409,"states":["VA"],"tier":"published"},{"code":27100,"name":"Jackson, MI","idxM":100.9,"rankM":439,"idx3":103.2,"rank3":382,"states":["MI"],"tier":"reliable"},{"code":29420,"name":"Lake Havasu City-Kingman, AZ","idxM":100.9,"rankM":440,"idx3":99.4,"rank3":458,"states":["AZ"],"tier":"reliable"},{"code":14780,"name":"Brenham, TX","idxM":100.8,"rankM":441,"idx3":97.7,"rank3":500,"states":["TX"],"tier":"published"},{"code":32780,"name":"Medford, OR","idxM":100.8,"rankM":442,"idx3":101.3,"rank3":414,"states":["OR"],"tier":"reliable"},{"code":38380,"name":"Plainview, TX","idxM":100.7,"rankM":443,"idx3":99.2,"rank3":468,"states":["TX"],"tier":"published"},{"code":44100,"name":"Springfield, IL","idxM":100.7,"rankM":444,"idx3":104.9,"rank3":350,"states":["IL"],"tier":"reliable"},{"code":40420,"name":"Rockford, IL","idxM":100.6,"rankM":445,"idx3":99.4,"rank3":459,"states":["IL"],"tier":"large"},{"code":28450,"name":"Kenosha, WI","idxM":100.6,"rankM":446,"idx3":99.5,"rank3":453,"states":["WI"],"tier":"reliable"},{"code":36900,"name":"Ottumwa, IA","idxM":100.5,"rankM":447,"idx3":101.3,"rank3":415,"states":["IA"],"tier":"published"},{"code":30580,"name":"Liberal, KS","idxM":100.5,"rankM":448,"idx3":99,"rank3":472,"states":["KS"],"tier":"published"},{"code":32000,"name":"Marion, NC","idxM":100.5,"rankM":449,"idx3":102.1,"rank3":403,"states":["NC"],"tier":"published"},{"code":39820,"name":"Redding, CA","idxM":100.4,"rankM":450,"idx3":101,"rank3":420,"states":["CA"],"tier":"reliable"},{"code":28900,"name":"Klamath Falls, OR","idxM":100.4,"rankM":451,"idx3":97.9,"rank3":498,"states":["OR"],"tier":"published"},{"code":45300,"name":"Tampa-St. Petersburg-Clearwater, FL","idxM":100.4,"rankM":452,"idx3":100.3,"rank3":437,"states":["FL"],"tier":"large"},{"code":42780,"name":"Selinsgrove, PA","idxM":100.4,"rankM":453,"idx3":96.3,"rank3":528,"states":["PA"],"tier":"published"},{"code":31340,"name":"Lynchburg, VA","idxM":100.3,"rankM":454,"idx3":99.7,"rank3":450,"states":["VA"],"tier":"reliable"},{"code":41400,"name":"Salem, OH","idxM":100.3,"rankM":455,"idx3":99.4,"rank3":460,"states":["OH"],"tier":"reliable"},{"code":35900,"name":"North Wilkesboro, NC","idxM":100.3,"rankM":456,"idx3":97.3,"rank3":510,"states":["NC"],"tier":"published"},{"code":46100,"name":"Tullahoma-Manchester, TN","idxM":100.2,"rankM":457,"idx3":99.9,"rank3":446,"states":["TN"],"tier":"reliable"},{"code":10780,"name":"Alexandria, LA","idxM":100.2,"rankM":458,"idx3":99.5,"rank3":454,"states":["LA"],"tier":"reliable"},{"code":12060,"name":"Atlanta-Sandy Springs-Roswell, GA","idxM":100.1,"rankM":459,"idx3":100.2,"rank3":438,"states":["GA"],"tier":"large"},{"code":31500,"name":"Madison, IN","idxM":100.1,"rankM":460,"idx3":101.1,"rank3":419,"states":["IN"],"tier":"published"},{"code":48660,"name":"Wichita Falls, TX","idxM":100,"rankM":461,"idx3":102.5,"rank3":395,"states":["TX"],"tier":"reliable"},{"code":20660,"name":"Easton, MD","idxM":100,"rankM":462,"idx3":97.2,"rank3":514,"states":["MD"],"tier":"published"},{"code":36260,"name":"Ogden, UT","idxM":100,"rankM":463,"idx3":100.1,"rank3":441,"states":["UT"],"tier":"large"},{"code":16460,"name":"Centralia, IL","idxM":100,"rankM":464,"idx3":99.1,"rank3":470,"states":["IL"],"tier":"published"},{"code":33980,"name":"Morehead City, NC","idxM":100,"rankM":465,"idx3":107.9,"rank3":273,"states":["NC"],"tier":"reliable"},{"code":42420,"name":"Scottsbluff, NE","idxM":100,"rankM":466,"idx3":101,"rank3":421,"states":["NE"],"tier":"published"},{"code":47380,"name":"Waco, TX","idxM":99.9,"rankM":467,"idx3":103,"rank3":386,"states":["TX"],"tier":"large"},{"code":16660,"name":"Charleston-Mattoon, IL","idxM":99.9,"rankM":468,"idx3":99.4,"rank3":461,"states":["IL"],"tier":"published"},{"code":44860,"name":"Sulphur Springs, TX","idxM":99.8,"rankM":469,"idx3":99.5,"rank3":455,"states":["TX"],"tier":"published"},{"code":39340,"name":"Provo-Orem-Lehi, UT","idxM":99.7,"rankM":470,"idx3":98.9,"rank3":477,"states":["UT"],"tier":"large"},{"code":47540,"name":"Wapakoneta, OH","idxM":99.7,"rankM":471,"idx3":99,"rank3":473,"states":["OH"],"tier":"published"},{"code":26420,"name":"Houston-Pasadena-The Woodlands, TX","idxM":99.6,"rankM":472,"idx3":98.9,"rank3":478,"states":["TX"],"tier":"large"},{"code":37140,"name":"Paducah, KY-IL","idxM":99.5,"rankM":473,"idx3":99,"rank3":474,"states":["KY","IL"],"tier":"reliable"},{"code":36620,"name":"Ontario, OR-ID","idxM":99.5,"rankM":474,"idx3":99.5,"rank3":456,"states":["OR","ID"],"tier":"published"},{"code":18740,"name":"Coshocton, OH","idxM":99.5,"rankM":475,"idx3":99,"rank3":475,"states":["OH"],"tier":"published"},{"code":32660,"name":"McMinnville, TN","idxM":99.4,"rankM":476,"idx3":98.7,"rank3":483,"states":["TN"],"tier":"published"},{"code":18260,"name":"Cookeville, TN","idxM":99.4,"rankM":477,"idx3":99.3,"rank3":464,"states":["TN"],"tier":"reliable"},{"code":34620,"name":"Muncie, IN","idxM":99.4,"rankM":478,"idx3":98.8,"rank3":482,"states":["IN"],"tier":"reliable"},{"code":41660,"name":"San Angelo, TX","idxM":99.3,"rankM":479,"idx3":98.9,"rank3":479,"states":["TX"],"tier":"reliable"},{"code":43420,"name":"Sierra Vista-Douglas, AZ","idxM":99.2,"rankM":480,"idx3":101.2,"rank3":417,"states":["AZ"],"tier":"reliable"},{"code":30060,"name":"Lebanon, MO","idxM":99,"rankM":481,"idx3":101.5,"rank3":413,"states":["MO"],"tier":"published"},{"code":43940,"name":"Spearfish, SD","idxM":98.7,"rankM":482,"idx3":99.3,"rank3":465,"states":["SD"],"tier":"published"},{"code":44780,"name":"Sturgis, MI","idxM":98.6,"rankM":483,"idx3":97.7,"rank3":501,"states":["MI"],"tier":"published"},{"code":24620,"name":"Greeneville, TN","idxM":98.6,"rankM":484,"idx3":98,"rank3":496,"states":["TN"],"tier":"published"},{"code":22580,"name":"Forest City, NC","idxM":98.5,"rankM":485,"idx3":95.7,"rank3":543,"states":["NC"],"tier":"published"},{"code":10620,"name":"Albemarle, NC","idxM":98.5,"rankM":486,"idx3":96.4,"rank3":527,"states":["NC"],"tier":"published"},{"code":23780,"name":"Garden City, KS","idxM":98.5,"rankM":487,"idx3":98,"rank3":497,"states":["KS"],"tier":"published"},{"code":24100,"name":"Gloversville, NY","idxM":98.3,"rankM":488,"idx3":95.5,"rank3":546,"states":["NY"],"tier":"published"},{"code":48940,"name":"Wilmington, OH","idxM":98.2,"rankM":489,"idx3":100.5,"rank3":433,"states":["OH"],"tier":"published"},{"code":14300,"name":"Bonham, TX","idxM":98.1,"rankM":490,"idx3":93.7,"rank3":579,"states":["TX"],"tier":"published"},{"code":39940,"name":"Rexburg, ID","idxM":98,"rankM":491,"idx3":97.7,"rank3":502,"states":["ID"],"tier":"published"},{"code":40940,"name":"Safford, AZ","idxM":97.9,"rankM":492,"idx3":97,"rank3":518,"states":["AZ"],"tier":"published"},{"code":21420,"name":"Enid, OK","idxM":97.9,"rankM":493,"idx3":98.7,"rank3":484,"states":["OK"],"tier":"published"},{"code":44980,"name":"Sunbury, PA","idxM":97.9,"rankM":494,"idx3":96.5,"rank3":526,"states":["PA"],"tier":"reliable"},{"code":24700,"name":"Greensburg, IN","idxM":97.9,"rankM":495,"idx3":96.1,"rank3":533,"states":["IN"],"tier":"published"},{"code":27380,"name":"Jacksonville, TX","idxM":97.9,"rankM":496,"idx3":100.2,"rank3":439,"states":["TX"],"tier":"published"},{"code":47920,"name":"Washington Court House, OH","idxM":97.7,"rankM":497,"idx3":97.8,"rank3":499,"states":["OH"],"tier":"published"},{"code":41420,"name":"Salem, OR","idxM":97.7,"rankM":498,"idx3":98.6,"rank3":486,"states":["OR"],"tier":"reliable"},{"code":35660,"name":"Niles, MI","idxM":97.7,"rankM":499,"idx3":95.9,"rank3":536,"states":["MI"],"tier":"reliable"},{"code":43340,"name":"Shreveport-Bossier City, LA","idxM":97.7,"rankM":500,"idx3":94.5,"rank3":562,"states":["LA"],"tier":"large"},{"code":31180,"name":"Lubbock, TX","idxM":97.7,"rankM":501,"idx3":95.7,"rank3":544,"states":["TX"],"tier":"large"},{"code":33860,"name":"Montgomery, AL","idxM":97.6,"rankM":502,"idx3":95.8,"rank3":538,"states":["AL"],"tier":"large"},{"code":31930,"name":"Marietta, OH","idxM":97.6,"rankM":503,"idx3":102.4,"rank3":396,"states":["OH"],"tier":"published"},{"code":37460,"name":"Panama City-Panama City Beach, FL","idxM":97.5,"rankM":504,"idx3":100.1,"rank3":442,"states":["FL"],"tier":"reliable"},{"code":40740,"name":"Roswell, NM","idxM":97.3,"rankM":505,"idx3":99.5,"rank3":457,"states":["NM"],"tier":"published"},{"code":22100,"name":"Farmington, MO","idxM":97.3,"rankM":506,"idx3":98.9,"rank3":480,"states":["MO"],"tier":"published"},{"code":19500,"name":"Decatur, IL","idxM":97.3,"rankM":507,"idx3":101.3,"rank3":416,"states":["IL"],"tier":"reliable"},{"code":34140,"name":"Moscow, ID","idxM":97.2,"rankM":508,"idx3":98.3,"rank3":493,"states":["ID"],"tier":"published"},{"code":38620,"name":"Ponca City, OK","idxM":97.1,"rankM":509,"idx3":100,"rank3":443,"states":["OK"],"tier":"published"},{"code":27260,"name":"Jacksonville, FL","idxM":97,"rankM":510,"idx3":97.2,"rank3":515,"states":["FL"],"tier":"large"},{"code":28580,"name":"Key West-Key Largo, FL","idxM":97,"rankM":511,"idx3":102.6,"rank3":393,"states":["FL"],"tier":"reliable"},{"code":34500,"name":"Mount Vernon, IL","idxM":96.9,"rankM":512,"idx3":97.3,"rank3":511,"states":["IL"],"tier":"published"},{"code":13140,"name":"Beaumont-Port Arthur, TX","idxM":96.9,"rankM":513,"idx3":91.8,"rank3":615,"states":["TX"],"tier":"reliable"},{"code":36500,"name":"Olympia-Lacey-Tumwater, WA","idxM":96.8,"rankM":514,"idx3":94.9,"rank3":556,"states":["WA"],"tier":"reliable"},{"code":23620,"name":"Gainesville, TX","idxM":96.8,"rankM":515,"idx3":94.3,"rank3":567,"states":["TX"],"tier":"published"},{"code":26580,"name":"Huntington-Ashland, WV-KY-OH","idxM":96.8,"rankM":516,"idx3":97.1,"rank3":516,"states":["WV","KY","OH"],"tier":"reliable"},{"code":24540,"name":"Greeley, CO","idxM":96.7,"rankM":517,"idx3":96,"rank3":534,"states":["CO"],"tier":"reliable"},{"code":25180,"name":"Hagerstown-Martinsburg, MD-WV","idxM":96.7,"rankM":518,"idx3":99.3,"rank3":466,"states":["MD","WV"],"tier":"reliable"},{"code":35100,"name":"New Bern, NC","idxM":96.7,"rankM":519,"idx3":101,"rank3":422,"states":["NC"],"tier":"reliable"},{"code":44580,"name":"Sterling, IL","idxM":96.6,"rankM":520,"idx3":96.3,"rank3":529,"states":["IL"],"tier":"published"},{"code":23660,"name":"Galesburg, IL","idxM":96.6,"rankM":521,"idx3":99.6,"rank3":451,"states":["IL"],"tier":"published"},{"code":17060,"name":"Chillicothe, OH","idxM":96.5,"rankM":522,"idx3":97.7,"rank3":503,"states":["OH"],"tier":"reliable"},{"code":18900,"name":"Crossville, TN","idxM":96.5,"rankM":523,"idx3":100.9,"rank3":428,"states":["TN"],"tier":"published"},{"code":20700,"name":"East Stroudsburg, PA","idxM":96.4,"rankM":524,"idx3":86.8,"rank3":695,"states":["PA"],"tier":"reliable"},{"code":37100,"name":"Oxnard-Thousand Oaks-Ventura, CA","idxM":96.4,"rankM":525,"idx3":99,"rank3":476,"states":["CA"],"tier":"large"},{"code":35420,"name":"New Philadelphia-Dover, OH","idxM":96.3,"rankM":526,"idx3":98.5,"rank3":490,"states":["OH"],"tier":"reliable"},{"code":21140,"name":"Elkhart-Goshen, IN","idxM":96.1,"rankM":527,"idx3":94.7,"rank3":560,"states":["IN"],"tier":"reliable"},{"code":34940,"name":"Naples-Marco Island, FL","idxM":96.1,"rankM":528,"idx3":95.4,"rank3":549,"states":["FL"],"tier":"large"},{"code":29340,"name":"Lake Charles, LA","idxM":96.1,"rankM":529,"idx3":93.9,"rank3":575,"states":["LA"],"tier":"reliable"},{"code":10540,"name":"Albany, OR","idxM":96,"rankM":530,"idx3":95.8,"rank3":539,"states":["OR"],"tier":"reliable"},{"code":46020,"name":"Truckee-Grass Valley, CA","idxM":95.9,"rankM":531,"idx3":97.4,"rank3":507,"states":["CA"],"tier":"reliable"},{"code":17500,"name":"Clewiston, FL","idxM":95.8,"rankM":532,"idx3":95.8,"rank3":540,"states":["FL"],"tier":"published"},{"code":12260,"name":"Augusta-Richmond County, GA-SC","idxM":95.7,"rankM":533,"idx3":95.2,"rank3":552,"states":["GA","SC"],"tier":"large"},{"code":12980,"name":"Battle Creek, MI","idxM":95.7,"rankM":534,"idx3":97,"rank3":519,"states":["MI"],"tier":"reliable"},{"code":24660,"name":"Greensboro-High Point, NC","idxM":95.7,"rankM":535,"idx3":93,"rank3":589,"states":["NC"],"tier":"large"},{"code":25460,"name":"Harrison, AR","idxM":95.6,"rankM":536,"idx3":97.6,"rank3":504,"states":["AR"],"tier":"published"},{"code":14540,"name":"Bowling Green, KY","idxM":95.6,"rankM":537,"idx3":94.2,"rank3":570,"states":["KY"],"tier":"reliable"},{"code":37340,"name":"Palm Bay-Melbourne-Titusville, FL","idxM":95.6,"rankM":538,"idx3":97.5,"rank3":506,"states":["FL"],"tier":"large"},{"code":27900,"name":"Joplin, MO-KS","idxM":95.6,"rankM":539,"idx3":96.8,"rank3":522,"states":["MO","KS"],"tier":"reliable"},{"code":20100,"name":"Dover, DE","idxM":95.6,"rankM":540,"idx3":97.4,"rank3":508,"states":["DE"],"tier":"reliable"},{"code":39420,"name":"Pullman, WA","idxM":95.5,"rankM":541,"idx3":98.5,"rank3":491,"states":["WA"],"tier":"published"},{"code":36980,"name":"Owensboro, KY","idxM":95.5,"rankM":542,"idx3":95.2,"rank3":553,"states":["KY"],"tier":"reliable"},{"code":36180,"name":"Ocean Pines, MD","idxM":95.4,"rankM":543,"idx3":94.2,"rank3":571,"states":["MD"],"tier":"published"},{"code":39780,"name":"Red Bluff, CA","idxM":95.4,"rankM":544,"idx3":97.6,"rank3":505,"states":["CA"],"tier":"published"},{"code":30980,"name":"Longview, TX","idxM":95.3,"rankM":545,"idx3":93.5,"rank3":584,"states":["TX"],"tier":"reliable"},{"code":41500,"name":"Salinas, CA","idxM":95.3,"rankM":546,"idx3":96.3,"rank3":530,"states":["CA"],"tier":"reliable"},{"code":35300,"name":"New Haven-Milford, CT","idxM":95.2,"rankM":547,"idx3":93.9,"rank3":576,"states":["CT"],"tier":"large"},{"code":18620,"name":"Corsicana, TX","idxM":95.2,"rankM":548,"idx3":95.6,"rank3":545,"states":["TX"],"tier":"published"},{"code":22140,"name":"Farmington, NM","idxM":94.9,"rankM":549,"idx3":95.3,"rank3":551,"states":["NM"],"tier":"reliable"},{"code":12940,"name":"Baton Rouge, LA","idxM":94.8,"rankM":550,"idx3":89.4,"rank3":653,"states":["LA"],"tier":"large"},{"code":19060,"name":"Cumberland, MD-WV","idxM":94.7,"rankM":551,"idx3":98.6,"rank3":487,"states":["MD","WV"],"tier":"reliable"},{"code":43060,"name":"Shawnee, OK","idxM":94.7,"rankM":552,"idx3":97.4,"rank3":509,"states":["OK"],"tier":"published"},{"code":43500,"name":"Silver City, NM","idxM":94.7,"rankM":553,"idx3":91.5,"rank3":618,"states":["NM"],"tier":"published"},{"code":40900,"name":"Sacramento-Roseville-Folsom, CA","idxM":94.6,"rankM":554,"idx3":94.9,"rank3":557,"states":["CA"],"tier":"large"},{"code":25880,"name":"Hillsdale, MI","idxM":94.6,"rankM":555,"idx3":98.2,"rank3":494,"states":["MI"],"tier":"published"},{"code":27340,"name":"Jacksonville, NC","idxM":94.5,"rankM":556,"idx3":96.9,"rank3":521,"states":["NC"],"tier":"reliable"},{"code":21300,"name":"Elmira, NY","idxM":94.5,"rankM":557,"idx3":87.6,"rank3":680,"states":["NY"],"tier":"reliable"},{"code":10860,"name":"Alice, TX","idxM":94.4,"rankM":558,"idx3":96,"rank3":535,"states":["TX"],"tier":"published"},{"code":44660,"name":"Stillwater, OK","idxM":94.4,"rankM":559,"idx3":93.9,"rank3":577,"states":["OK"],"tier":"reliable"},{"code":37220,"name":"Pahrump, NV","idxM":94.4,"rankM":560,"idx3":96.8,"rank3":523,"states":["NV"],"tier":"published"},{"code":26020,"name":"Hobbs, NM","idxM":94.2,"rankM":561,"idx3":94.5,"rank3":563,"states":["NM"],"tier":"reliable"},{"code":47460,"name":"Walla Walla, WA","idxM":94.2,"rankM":562,"idx3":94.5,"rank3":564,"states":["WA"],"tier":"published"},{"code":35140,"name":"Newberry, SC","idxM":94.1,"rankM":563,"idx3":89.5,"rank3":651,"states":["SC"],"tier":"published"},{"code":48220,"name":"Weatherford, OK","idxM":94.1,"rankM":564,"idx3":93.1,"rank3":588,"states":["OK"],"tier":"published"},{"code":10140,"name":"Aberdeen, WA","idxM":94.1,"rankM":565,"idx3":98.9,"rank3":481,"states":["WA"],"tier":"published"},{"code":28420,"name":"Kennewick-Richland, WA","idxM":94,"rankM":566,"idx3":95.4,"rank3":550,"states":["WA"],"tier":"reliable"},{"code":15260,"name":"Brunswick-St. Simons, GA","idxM":94,"rankM":567,"idx3":97,"rank3":520,"states":["GA"],"tier":"reliable"},{"code":15700,"name":"Cambridge, MD","idxM":93.8,"rankM":568,"idx3":93,"rank3":590,"states":["MD"],"tier":"published"},{"code":44500,"name":"Stephenville, TX","idxM":93.6,"rankM":569,"idx3":92.1,"rank3":608,"states":["TX"],"tier":"published"},{"code":46340,"name":"Tyler, TX","idxM":93.6,"rankM":570,"idx3":93.7,"rank3":580,"states":["TX"],"tier":"reliable"},{"code":25060,"name":"Gulfport-Biloxi, MS","idxM":93.5,"rankM":571,"idx3":91.9,"rank3":613,"states":["MS"],"tier":"large"},{"code":37300,"name":"Palestine, TX","idxM":93.4,"rankM":572,"idx3":92.2,"rank3":604,"states":["TX"],"tier":"published"},{"code":23300,"name":"Freeport, IL","idxM":93.4,"rankM":573,"idx3":98.5,"rank3":492,"states":["IL"],"tier":"published"},{"code":37580,"name":"Paris, TX","idxM":93.4,"rankM":574,"idx3":93.6,"rank3":583,"states":["TX"],"tier":"published"},{"code":11620,"name":"Ardmore, OK","idxM":93.2,"rankM":575,"idx3":95.8,"rank3":541,"states":["OK"],"tier":"published"},{"code":11200,"name":"Amherst Town-Northampton, MA","idxM":93.1,"rankM":576,"idx3":94.8,"rank3":559,"states":["MA"],"tier":"reliable"},{"code":32540,"name":"McAlester, OK","idxM":93.1,"rankM":577,"idx3":92.5,"rank3":598,"states":["OK"],"tier":"published"},{"code":21060,"name":"Elizabethtown, KY","idxM":92.9,"rankM":578,"idx3":90.6,"rank3":630,"states":["KY"],"tier":"reliable"},{"code":28100,"name":"Kankakee, IL","idxM":92.9,"rankM":579,"idx3":94.1,"rank3":572,"states":["IL"],"tier":"reliable"},{"code":45880,"name":"Town of Pecos, TX","idxM":92.9,"rankM":580,"idx3":90.3,"rank3":634,"states":["TX"],"tier":"published"},{"code":33060,"name":"Miami, OK","idxM":92.8,"rankM":581,"idx3":94.4,"rank3":565,"states":["OK"],"tier":"published"},{"code":31020,"name":"Longview-Kelso, WA","idxM":92.7,"rankM":582,"idx3":95.9,"rank3":537,"states":["WA"],"tier":"reliable"},{"code":23700,"name":"Gallup, NM","idxM":92.7,"rankM":583,"idx3":92.6,"rank3":595,"states":["NM"],"tier":"published"},{"code":33780,"name":"Monroe, MI","idxM":92.6,"rankM":584,"idx3":92.3,"rank3":600,"states":["MI"],"tier":"reliable"},{"code":36380,"name":"Okeechobee, FL","idxM":92.6,"rankM":585,"idx3":95.8,"rank3":542,"states":["FL"],"tier":"published"},{"code":15340,"name":"Bucyrus, OH","idxM":92.6,"rankM":586,"idx3":94.4,"rank3":566,"states":["OH"],"tier":"published"},{"code":28700,"name":"Kingsport-Bristol, TN-VA","idxM":92.6,"rankM":587,"idx3":90.3,"rank3":635,"states":["TN","VA"],"tier":"reliable"},{"code":17580,"name":"Clovis, NM","idxM":92.6,"rankM":588,"idx3":93.4,"rank3":585,"states":["NM"],"tier":"published"},{"code":10760,"name":"Alexander City, AL","idxM":92.5,"rankM":589,"idx3":92.1,"rank3":609,"states":["AL"],"tier":"published"},{"code":12020,"name":"Athens-Clarke County, GA","idxM":92.5,"rankM":590,"idx3":92.7,"rank3":594,"states":["GA"],"tier":"reliable"},{"code":12100,"name":"Atlantic City-Hammonton, NJ","idxM":92.5,"rankM":591,"idx3":97.3,"rank3":512,"states":["NJ"],"tier":"reliable"},{"code":29740,"name":"Las Cruces, NM","idxM":92.5,"rankM":592,"idx3":92.5,"rank3":599,"states":["NM"],"tier":"reliable"},{"code":24940,"name":"Greenwood, SC","idxM":92.4,"rankM":593,"idx3":89.6,"rank3":648,"states":["SC"],"tier":"reliable"},{"code":42100,"name":"Santa Cruz-Watsonville, CA","idxM":92.4,"rankM":594,"idx3":93.4,"rank3":586,"states":["CA"],"tier":"reliable"},{"code":11460,"name":"Ann Arbor, MI","idxM":92.3,"rankM":595,"idx3":89.5,"rank3":652,"states":["MI"],"tier":"large"},{"code":42940,"name":"Sevierville, TN","idxM":92.3,"rankM":596,"idx3":92.3,"rank3":601,"states":["TN"],"tier":"reliable"},{"code":39380,"name":"Pueblo, CO","idxM":92.3,"rankM":597,"idx3":95.5,"rank3":547,"states":["CO"],"tier":"reliable"},{"code":42820,"name":"Selma, AL","idxM":92.2,"rankM":598,"idx3":90,"rank3":639,"states":["AL"],"tier":"published"},{"code":38940,"name":"Port St. Lucie, FL","idxM":92.2,"rankM":599,"idx3":92.2,"rank3":605,"states":["FL"],"tier":"large"},{"code":48460,"name":"West Plains, MO","idxM":92.2,"rankM":600,"idx3":95.5,"rank3":548,"states":["MO"],"tier":"published"},{"code":49180,"name":"Winston-Salem, NC","idxM":92.2,"rankM":601,"idx3":92.3,"rank3":602,"states":["NC"],"tier":"large"},{"code":15460,"name":"Burlington, IA-IL","idxM":92.2,"rankM":602,"idx3":94.1,"rank3":573,"states":["IA","IL"],"tier":"published"},{"code":42860,"name":"Seneca, SC","idxM":92.1,"rankM":603,"idx3":92.1,"rank3":610,"states":["SC"],"tier":"reliable"},{"code":10220,"name":"Ada, OK","idxM":92.1,"rankM":604,"idx3":100.4,"rank3":435,"states":["OK"],"tier":"published"},{"code":26140,"name":"Homosassa Springs, FL","idxM":92,"rankM":605,"idx3":93.2,"rank3":587,"states":["FL"],"tier":"reliable"},{"code":14140,"name":"Bluefield, WV-VA","idxM":92,"rankM":606,"idx3":94.7,"rank3":561,"states":["WV","VA"],"tier":"reliable"},{"code":23540,"name":"Gainesville, FL","idxM":92,"rankM":607,"idx3":92.2,"rank3":606,"states":["FL"],"tier":"large"},{"code":47180,"name":"Vincennes, IN","idxM":92,"rankM":608,"idx3":95.2,"rank3":554,"states":["IN"],"tier":"published"},{"code":25840,"name":"Hermiston-Pendleton, OR","idxM":91.9,"rankM":609,"idx3":92.1,"rank3":611,"states":["OR"],"tier":"reliable"},{"code":43180,"name":"Shelbyville, TN","idxM":91.9,"rankM":610,"idx3":94.3,"rank3":568,"states":["TN"],"tier":"published"},{"code":35460,"name":"Newport, TN","idxM":91.9,"rankM":611,"idx3":88.6,"rank3":667,"states":["TN"],"tier":"published"},{"code":45220,"name":"Tallahassee, FL","idxM":91.8,"rankM":612,"idx3":92.9,"rank3":591,"states":["FL"],"tier":"large"},{"code":10940,"name":"Alma, MI","idxM":91.6,"rankM":613,"idx3":91.3,"rank3":620,"states":["MI"],"tier":"published"},{"code":18700,"name":"Corvallis, OR","idxM":91.6,"rankM":614,"idx3":91.3,"rank3":621,"states":["OR"],"tier":"reliable"},{"code":15220,"name":"Brownwood, TX","idxM":91.6,"rankM":615,"idx3":96.3,"rank3":531,"states":["TX"],"tier":"published"},{"code":34820,"name":"Myrtle Beach-Conway-North Myrtle Beach, SC","idxM":91.5,"rankM":616,"idx3":96.6,"rank3":525,"states":["SC"],"tier":"large"},{"code":34780,"name":"Muskogee, OK","idxM":91.5,"rankM":617,"idx3":92.6,"rank3":596,"states":["OK"],"tier":"reliable"},{"code":30020,"name":"Lawton, OK","idxM":91.4,"rankM":618,"idx3":91.9,"rank3":614,"states":["OK"],"tier":"reliable"},{"code":34100,"name":"Morristown, TN","idxM":91.4,"rankM":619,"idx3":92.6,"rank3":597,"states":["TN"],"tier":"reliable"},{"code":33220,"name":"Midland, MI","idxM":91.3,"rankM":620,"idx3":89.6,"rank3":649,"states":["MI"],"tier":"reliable"},{"code":34340,"name":"Mount Airy, NC","idxM":91.3,"rankM":621,"idx3":92.9,"rank3":592,"states":["NC"],"tier":"reliable"},{"code":23180,"name":"Frankfort, KY","idxM":91.1,"rankM":622,"idx3":90.8,"rank3":627,"states":["KY"],"tier":"reliable"},{"code":33260,"name":"Midland, TX","idxM":91.1,"rankM":623,"idx3":89.7,"rank3":644,"states":["TX"],"tier":"reliable"},{"code":49010,"name":"Winchester, TN","idxM":91,"rankM":624,"idx3":92,"rank3":612,"states":["TN"],"tier":"published"},{"code":37860,"name":"Pensacola-Ferry Pass-Brent, FL","idxM":90.9,"rankM":625,"idx3":92.8,"rank3":593,"states":["FL"],"tier":"large"},{"code":45500,"name":"Texarkana, TX-AR","idxM":90.9,"rankM":626,"idx3":91.1,"rank3":623,"states":["TX","AR"],"tier":"reliable"},{"code":24180,"name":"Granbury, TX","idxM":90.8,"rankM":627,"idx3":90.1,"rank3":638,"states":["TX"],"tier":"published"},{"code":14700,"name":"Branson, MO","idxM":90.8,"rankM":628,"idx3":93.7,"rank3":581,"states":["MO"],"tier":"reliable"},{"code":25720,"name":"Heber, UT","idxM":90.8,"rankM":629,"idx3":90.9,"rank3":626,"states":["UT"],"tier":"reliable"},{"code":37420,"name":"Pampa, TX","idxM":90.7,"rankM":630,"idx3":91.3,"rank3":622,"states":["TX"],"tier":"published"},{"code":47080,"name":"Vidalia, GA","idxM":90.7,"rankM":631,"idx3":91.5,"rank3":619,"states":["GA"],"tier":"published"},{"code":23680,"name":"Gallipolis, OH","idxM":90.7,"rankM":632,"idx3":91.7,"rank3":616,"states":["OH"],"tier":"published"},{"code":34680,"name":"Murrells Inlet, SC","idxM":90.6,"rankM":633,"idx3":91.6,"rank3":617,"states":["SC"],"tier":"published"},{"code":18460,"name":"Cornelia, GA","idxM":90.6,"rankM":634,"idx3":92.2,"rank3":607,"states":["GA"],"tier":"published"},{"code":31060,"name":"Los Alamos, NM","idxM":90.6,"rankM":635,"idx3":98.2,"rank3":495,"states":["NM"],"tier":"published"},{"code":23190,"name":"Franklin, KY","idxM":90.6,"rankM":636,"idx3":93.8,"rank3":578,"states":["KY"],"tier":"published"},{"code":45180,"name":"Talladega-Sylacauga, AL","idxM":90.3,"rankM":637,"idx3":89.9,"rank3":640,"states":["AL"],"tier":"reliable"},{"code":35380,"name":"New Orleans-Metairie, LA","idxM":90.1,"rankM":638,"idx3":86.4,"rank3":702,"states":["LA"],"tier":"large"},{"code":17300,"name":"Clarksville, TN-KY","idxM":90.1,"rankM":639,"idx3":91,"rank3":624,"states":["TN","KY"],"tier":"reliable"},{"code":43760,"name":"Sonora, CA","idxM":90,"rankM":640,"idx3":89.6,"rank3":650,"states":["CA"],"tier":"published"},{"code":43300,"name":"Sherman-Denison, TX","idxM":89.9,"rankM":641,"idx3":87.2,"rank3":689,"states":["TX"],"tier":"reliable"},{"code":33660,"name":"Mobile, AL","idxM":89.8,"rankM":642,"idx3":90.5,"rank3":632,"states":["AL"],"tier":"large"},{"code":44340,"name":"Statesboro, GA","idxM":89.6,"rankM":643,"idx3":87.1,"rank3":691,"states":["GA"],"tier":"reliable"},{"code":36740,"name":"Orlando-Kissimmee-Sanford, FL","idxM":89.6,"rankM":644,"idx3":87.9,"rank3":675,"states":["FL"],"tier":"large"},{"code":11980,"name":"Athens, TX","idxM":89.6,"rankM":645,"idx3":89.1,"rank3":657,"states":["TX"],"tier":"published"},{"code":45140,"name":"Tahlequah, OK","idxM":89.6,"rankM":646,"idx3":88.2,"rank3":671,"states":["OK"],"tier":"published"},{"code":18980,"name":"Cullman, AL","idxM":89.4,"rankM":647,"idx3":88.9,"rank3":660,"states":["AL"],"tier":"reliable"},{"code":20500,"name":"Durham-Chapel Hill, NC","idxM":89.4,"rankM":648,"idx3":89,"rank3":659,"states":["NC"],"tier":"large"},{"code":19460,"name":"Decatur, AL","idxM":89.3,"rankM":649,"idx3":87.5,"rank3":682,"states":["AL"],"tier":"reliable"},{"code":48300,"name":"Wenatchee-East Wenatchee, WA","idxM":89.3,"rankM":650,"idx3":98.6,"rank3":488,"states":["WA"],"tier":"reliable"},{"code":20140,"name":"Dublin, GA","idxM":89.2,"rankM":651,"idx3":88,"rank3":674,"states":["GA"],"tier":"published"},{"code":35060,"name":"Natchitoches, LA","idxM":89.2,"rankM":652,"idx3":87.7,"rank3":678,"states":["LA"],"tier":"published"},{"code":40260,"name":"Roanoke Rapids, NC","idxM":89.1,"rankM":653,"idx3":91,"rank3":625,"states":["NC"],"tier":"published"},{"code":24420,"name":"Grants Pass, OR","idxM":89.1,"rankM":654,"idx3":90.2,"rank3":637,"states":["OR"],"tier":"published"},{"code":13660,"name":"Big Rapids, MI","idxM":89.1,"rankM":655,"idx3":90.8,"rank3":628,"states":["MI"],"tier":"published"},{"code":47020,"name":"Victoria, TX","idxM":89.1,"rankM":656,"idx3":87.7,"rank3":679,"states":["TX"],"tier":"reliable"},{"code":11940,"name":"Athens, TN","idxM":89.1,"rankM":657,"idx3":90.5,"rank3":633,"states":["TN"],"tier":"published"},{"code":19180,"name":"Danville, IL","idxM":89,"rankM":658,"idx3":89.8,"rank3":642,"states":["IL"],"tier":"published"},{"code":29380,"name":"Lake City, FL","idxM":89,"rankM":659,"idx3":89.7,"rank3":645,"states":["FL"],"tier":"reliable"},{"code":37020,"name":"Owosso, MI","idxM":88.9,"rankM":660,"idx3":87.9,"rank3":676,"states":["MI"],"tier":"published"},{"code":47820,"name":"Washington, NC","idxM":88.9,"rankM":661,"idx3":87.3,"rank3":688,"states":["NC"],"tier":"published"},{"code":27740,"name":"Johnson City, TN","idxM":88.8,"rankM":662,"idx3":89.3,"rank3":654,"states":["TN"],"tier":"reliable"},{"code":21260,"name":"Ellensburg, WA","idxM":88.8,"rankM":663,"idx3":92.3,"rank3":603,"states":["WA"],"tier":"published"},{"code":22520,"name":"Florence-Muscle Shoals, AL","idxM":88.7,"rankM":664,"idx3":89.1,"rank3":658,"states":["AL"],"tier":"reliable"},{"code":42900,"name":"Seneca Falls, NY","idxM":88.6,"rankM":665,"idx3":84.3,"rank3":730,"states":["NY"],"tier":"published"},{"code":38210,"name":"Pikeville, KY","idxM":88.6,"rankM":666,"idx3":82.3,"rank3":752,"states":["KY"],"tier":"reliable"},{"code":43900,"name":"Spartanburg, SC","idxM":88.4,"rankM":667,"idx3":89.2,"rank3":656,"states":["SC"],"tier":"large"},{"code":48180,"name":"Waycross, GA","idxM":88.4,"rankM":668,"idx3":90.7,"rank3":629,"states":["GA"],"tier":"published"},{"code":38740,"name":"Poplar Bluff, MO","idxM":88.4,"rankM":669,"idx3":90.3,"rank3":636,"states":["MO"],"tier":"published"},{"code":11220,"name":"Amsterdam, NY","idxM":88.4,"rankM":670,"idx3":88.4,"rank3":670,"states":["NY"],"tier":"published"},{"code":20340,"name":"Duncan, OK","idxM":88.4,"rankM":671,"idx3":88.9,"rank3":661,"states":["OK"],"tier":"published"},{"code":32820,"name":"Memphis, TN-MS-AR","idxM":88.4,"rankM":672,"idx3":86.3,"rank3":704,"states":["TN","MS","AR"],"tier":"large"},{"code":31580,"name":"Madisonville, KY","idxM":88.2,"rankM":673,"idx3":86.3,"rank3":705,"states":["KY"],"tier":"published"},{"code":34660,"name":"Murray, KY","idxM":88.2,"rankM":674,"idx3":86.5,"rank3":699,"states":["KY"],"tier":"published"},{"code":28660,"name":"Killeen-Temple, TX","idxM":88,"rankM":675,"idx3":88.1,"rank3":673,"states":["TX"],"tier":"large"},{"code":31260,"name":"Lufkin, TX","idxM":87.9,"rankM":676,"idx3":89.7,"rank3":646,"states":["TX"],"tier":"reliable"},{"code":41540,"name":"Salisbury, MD","idxM":87.9,"rankM":677,"idx3":88.8,"rank3":664,"states":["MD"],"tier":"reliable"},{"code":17420,"name":"Cleveland, TN","idxM":87.8,"rankM":678,"idx3":85.1,"rank3":721,"states":["TN"],"tier":"reliable"},{"code":26380,"name":"Houma-Bayou Cane-Thibodaux, LA","idxM":87.8,"rankM":679,"idx3":84.3,"rank3":731,"states":["LA"],"tier":"reliable"},{"code":12220,"name":"Auburn-Opelika, AL","idxM":87.7,"rankM":680,"idx3":87.6,"rank3":681,"states":["AL"],"tier":"reliable"},{"code":32300,"name":"Martinsville, VA","idxM":87.5,"rankM":681,"idx3":89.3,"rank3":655,"states":["VA"],"tier":"published"},{"code":27180,"name":"Jackson, TN","idxM":87.4,"rankM":682,"idx3":88.2,"rank3":672,"states":["TN"],"tier":"reliable"},{"code":16060,"name":"Carbondale, IL","idxM":87.2,"rankM":683,"idx3":89.8,"rank3":643,"states":["IL"],"tier":"published"},{"code":46220,"name":"Tuscaloosa, AL","idxM":87.2,"rankM":684,"idx3":85.6,"rank3":715,"states":["AL"],"tier":"reliable"},{"code":15980,"name":"Cape Coral-Fort Myers, FL","idxM":87.1,"rankM":685,"idx3":84.8,"rank3":726,"states":["FL"],"tier":"large"},{"code":42460,"name":"Scottsboro, AL","idxM":87,"rankM":686,"idx3":90.6,"rank3":631,"states":["AL"],"tier":"published"},{"code":30780,"name":"Little Rock-North Little Rock-Conway, AR","idxM":86.9,"rankM":687,"idx3":87.5,"rank3":683,"states":["AR"],"tier":"large"},{"code":13020,"name":"Bay City, MI","idxM":86.8,"rankM":688,"idx3":86,"rank3":711,"states":["MI"],"tier":"reliable"},{"code":19660,"name":"Deltona-Daytona Beach-Ormond Beach, FL","idxM":86.8,"rankM":689,"idx3":87.2,"rank3":690,"states":["FL"],"tier":"large"},{"code":39020,"name":"Portsmouth, OH","idxM":86.8,"rankM":690,"idx3":88.9,"rank3":662,"states":["OH"],"tier":"published"},{"code":20900,"name":"El Campo, TX","idxM":86.7,"rankM":691,"idx3":86.7,"rank3":696,"states":["TX"],"tier":"published"},{"code":20460,"name":"Durant, OK","idxM":86.7,"rankM":692,"idx3":89.7,"rank3":647,"states":["OK"],"tier":"published"},{"code":34260,"name":"Mountain Home, AR","idxM":86.7,"rankM":693,"idx3":88.7,"rank3":665,"states":["AR"],"tier":"published"},{"code":12900,"name":"Batesville, AR","idxM":86.6,"rankM":694,"idx3":87.4,"rank3":685,"states":["AR"],"tier":"published"},{"code":25775,"name":"Henderson, KY","idxM":86.6,"rankM":695,"idx3":87,"rank3":692,"states":["KY"],"tier":"published"},{"code":19300,"name":"Daphne-Fairhope-Foley, AL","idxM":86.5,"rankM":696,"idx3":88.7,"rank3":666,"states":["AL"],"tier":"reliable"},{"code":34020,"name":"Morgan City, LA","idxM":86.5,"rankM":697,"idx3":89.9,"rank3":641,"states":["LA"],"tier":"published"},{"code":19220,"name":"Danville, KY","idxM":86.4,"rankM":698,"idx3":88.6,"rank3":668,"states":["KY"],"tier":"published"},{"code":23980,"name":"Glasgow, KY","idxM":86.3,"rankM":699,"idx3":86.6,"rank3":697,"states":["KY"],"tier":"published"},{"code":17980,"name":"Columbus, GA-AL","idxM":86.3,"rankM":700,"idx3":86.1,"rank3":706,"states":["GA","AL"],"tier":"reliable"},{"code":23460,"name":"Gadsden, AL","idxM":86.2,"rankM":701,"idx3":84.3,"rank3":732,"states":["AL"],"tier":"reliable"},{"code":22420,"name":"Flint, MI","idxM":86.2,"rankM":702,"idx3":85.1,"rank3":722,"states":["MI"],"tier":"reliable"},{"code":33740,"name":"Monroe, LA","idxM":86.2,"rankM":703,"idx3":84.3,"rank3":733,"states":["LA"],"tier":"reliable"},{"code":24140,"name":"Goldsboro, NC","idxM":86.1,"rankM":704,"idx3":85.2,"rank3":719,"states":["NC"],"tier":"reliable"},{"code":43460,"name":"Sikeston, MO","idxM":86,"rankM":705,"idx3":83.7,"rank3":737,"states":["MO"],"tier":"published"},{"code":22840,"name":"Fort Payne, AL","idxM":86,"rankM":706,"idx3":83.5,"rank3":739,"states":["AL"],"tier":"published"},{"code":11140,"name":"Americus, GA","idxM":85.8,"rankM":707,"idx3":86.9,"rank3":694,"states":["GA"],"tier":"published"},{"code":22900,"name":"Fort Smith, AR-OK","idxM":85.8,"rankM":708,"idx3":86.5,"rank3":700,"states":["AR","OK"],"tier":"reliable"},{"code":36220,"name":"Odessa, TX","idxM":85.7,"rankM":709,"idx3":82.6,"rank3":748,"states":["TX"],"tier":"reliable"},{"code":20980,"name":"El Dorado, AR","idxM":85.6,"rankM":710,"idx3":85.2,"rank3":720,"states":["AR"],"tier":"published"},{"code":38100,"name":"Picayune, MS","idxM":85.4,"rankM":711,"idx3":86.1,"rank3":707,"states":["MS"],"tier":"published"},{"code":34460,"name":"Mount Sterling, KY","idxM":85.4,"rankM":712,"idx3":87,"rank3":693,"states":["KY"],"tier":"published"},{"code":20020,"name":"Dothan, AL","idxM":85.3,"rankM":713,"idx3":85.6,"rank3":716,"states":["AL"],"tier":"reliable"},{"code":35020,"name":"Natchez, MS-LA","idxM":85.2,"rankM":714,"idx3":87.4,"rank3":686,"states":["MS","LA"],"tier":"published"},{"code":10700,"name":"Albertville, AL","idxM":85.2,"rankM":715,"idx3":85.5,"rank3":717,"states":["AL"],"tier":"reliable"},{"code":19620,"name":"Del Rio, TX","idxM":85.2,"rankM":716,"idx3":88.9,"rank3":663,"states":["TX"],"tier":"published"},{"code":36700,"name":"Orangeburg, SC","idxM":85.1,"rankM":717,"idx3":82.6,"rank3":749,"states":["SC"],"tier":"reliable"},{"code":11360,"name":"Anderson Creek, NC","idxM":85.1,"rankM":718,"idx3":83,"rank3":741,"states":["NC"],"tier":"reliable"},{"code":43700,"name":"Somerset, KY","idxM":85.1,"rankM":719,"idx3":86.5,"rank3":701,"states":["KY"],"tier":"published"},{"code":34860,"name":"Nacogdoches, TX","idxM":84.9,"rankM":720,"idx3":84.6,"rank3":727,"states":["TX"],"tier":"published"},{"code":46380,"name":"Ukiah, CA","idxM":84.9,"rankM":721,"idx3":87.4,"rank3":687,"states":["CA"],"tier":"reliable"},{"code":25780,"name":"Henderson, NC","idxM":84.9,"rankM":722,"idx3":85.8,"rank3":713,"states":["NC"],"tier":"published"},{"code":29700,"name":"Laredo, TX","idxM":84.8,"rankM":723,"idx3":85.7,"rank3":714,"states":["TX"],"tier":"reliable"},{"code":21340,"name":"El Paso, TX","idxM":84.8,"rankM":724,"idx3":84.4,"rank3":729,"states":["TX"],"tier":"large"},{"code":45940,"name":"Trenton-Princeton, NJ","idxM":84.7,"rankM":725,"idx3":86.4,"rank3":703,"states":["NJ"],"tier":"large"},{"code":17020,"name":"Chico, CA","idxM":84.6,"rankM":726,"idx3":85.1,"rank3":723,"states":["CA"],"tier":"reliable"},{"code":40780,"name":"Russellville, AR","idxM":84.5,"rankM":727,"idx3":87.8,"rank3":677,"states":["AR"],"tier":"published"},{"code":27140,"name":"Jackson, MS","idxM":84.5,"rankM":728,"idx3":85.9,"rank3":712,"states":["MS"],"tier":"large"},{"code":24980,"name":"Grenada, MS","idxM":84.2,"rankM":729,"idx3":82.9,"rank3":744,"states":["MS"],"tier":"published"},{"code":14180,"name":"Blytheville, AR","idxM":84.1,"rankM":730,"idx3":86.6,"rank3":698,"states":["AR"],"tier":"published"},{"code":16340,"name":"Cedartown, GA","idxM":83.9,"rankM":731,"idx3":83.8,"rank3":734,"states":["GA"],"tier":"published"},{"code":41820,"name":"Sanford, NC","idxM":83.9,"rankM":732,"idx3":86.1,"rank3":708,"states":["NC"],"tier":"reliable"},{"code":40980,"name":"Saginaw, MI","idxM":83.9,"rankM":733,"idx3":83.8,"rank3":735,"states":["MI"],"tier":"reliable"},{"code":19260,"name":"Danville, VA","idxM":83.7,"rankM":734,"idx3":86.1,"rank3":709,"states":["VA"],"tier":"reliable"},{"code":33380,"name":"Minden, LA","idxM":83.4,"rankM":735,"idx3":83.1,"rank3":740,"states":["LA"],"tier":"published"},{"code":33300,"name":"Milledgeville, GA","idxM":83.4,"rankM":736,"idx3":82.6,"rank3":750,"states":["GA"],"tier":"published"},{"code":23500,"name":"Gaffney, SC","idxM":83.4,"rankM":737,"idx3":87.5,"rank3":684,"states":["SC"],"tier":"published"},{"code":28680,"name":"Kingsland, GA","idxM":83.2,"rankM":738,"idx3":86.1,"rank3":710,"states":["GA"],"tier":"published"},{"code":28820,"name":"Kinston, NC","idxM":83.1,"rankM":739,"idx3":79.9,"rank3":770,"states":["NC"],"tier":"published"},{"code":23580,"name":"Gainesville, GA","idxM":83,"rankM":740,"idx3":83.7,"rank3":738,"states":["GA"],"tier":"reliable"},{"code":44940,"name":"Sumter, SC","idxM":82.9,"rankM":741,"idx3":83,"rank3":742,"states":["SC"],"tier":"reliable"},{"code":45620,"name":"Thomasville, GA","idxM":82.9,"rankM":742,"idx3":79.3,"rank3":775,"states":["GA"],"tier":"reliable"},{"code":15780,"name":"Camden, AR","idxM":82.5,"rankM":743,"idx3":85.4,"rank3":718,"states":["AR"],"tier":"published"},{"code":32940,"name":"Meridian, MS","idxM":82.5,"rankM":744,"idx3":83.8,"rank3":736,"states":["MS"],"tier":"reliable"},{"code":45580,"name":"Thomaston, GA","idxM":82.3,"rankM":745,"idx3":80,"rank3":769,"states":["GA"],"tier":"published"},{"code":29980,"name":"Lawrenceburg, TN","idxM":82.1,"rankM":746,"idx3":85.1,"rank3":724,"states":["TN"],"tier":"published"},{"code":32060,"name":"Marion-Herrin, IL","idxM":82,"rankM":747,"idx3":84.5,"rank3":728,"states":["IL"],"tier":"published"},{"code":22180,"name":"Fayetteville, NC","idxM":81.7,"rankM":748,"idx3":78.3,"rank3":782,"states":["NC"],"tier":"large"},{"code":46700,"name":"Vallejo, CA","idxM":81.6,"rankM":749,"idx3":83,"rank3":743,"states":["CA"],"tier":"reliable"},{"code":42680,"name":"Sebastian-Vero Beach-West Vero Corridor, FL","idxM":81.4,"rankM":750,"idx3":81.8,"rank3":753,"states":["FL"],"tier":"reliable"},{"code":44260,"name":"Starkville, MS","idxM":81.2,"rankM":751,"idx3":80.7,"rank3":759,"states":["MS"],"tier":"published"},{"code":36100,"name":"Ocala, FL","idxM":81.2,"rankM":752,"idx3":82.5,"rank3":751,"states":["FL"],"tier":"large"},{"code":26300,"name":"Hot Springs, AR","idxM":81.1,"rankM":753,"idx3":82.7,"rank3":745,"states":["AR"],"tier":"reliable"},{"code":46180,"name":"Tupelo, MS","idxM":80.8,"rankM":754,"idx3":76.1,"rank3":798,"states":["MS"],"tier":"reliable"},{"code":24900,"name":"Greenwood, MS","idxM":80.6,"rankM":755,"idx3":79.4,"rank3":774,"states":["MS"],"tier":"published"},{"code":29180,"name":"Lafayette, LA","idxM":80.4,"rankM":756,"idx3":78.8,"rank3":776,"states":["LA"],"tier":"large"},{"code":34380,"name":"Mount Pleasant, MI","idxM":80.3,"rankM":757,"idx3":80.6,"rank3":760,"states":["MI"],"tier":"published"},{"code":43140,"name":"Shelby-Kings Mountain, NC","idxM":80.2,"rankM":758,"idx3":78,"rank3":784,"states":["NC"],"tier":"reliable"},{"code":32460,"name":"Mayfield, KY","idxM":80,"rankM":759,"idx3":84.9,"rank3":725,"states":["KY"],"tier":"published"},{"code":19140,"name":"Dalton, GA","idxM":79.9,"rankM":760,"idx3":80.8,"rank3":758,"states":["GA"],"tier":"reliable"},{"code":27860,"name":"Jonesboro, AR","idxM":79.9,"rankM":761,"idx3":80.4,"rank3":763,"states":["AR"],"tier":"reliable"},{"code":26660,"name":"Huntsville, TX","idxM":79.8,"rankM":762,"idx3":81.4,"rank3":756,"states":["TX"],"tier":"published"},{"code":40820,"name":"Ruston, LA","idxM":79.7,"rankM":763,"idx3":80.5,"rank3":762,"states":["LA"],"tier":"published"},{"code":37060,"name":"Oxford, MS","idxM":79.6,"rankM":764,"idx3":82.7,"rank3":746,"states":["MS"],"tier":"reliable"},{"code":46660,"name":"Valdosta, GA","idxM":79.6,"rankM":765,"idx3":78.1,"rank3":783,"states":["GA"],"tier":"reliable"},{"code":34900,"name":"Napa, CA","idxM":79.6,"rankM":766,"idx3":80.3,"rank3":765,"states":["CA"],"tier":"reliable"},{"code":25620,"name":"Hattiesburg, MS","idxM":79.4,"rankM":767,"idx3":80.3,"rank3":766,"states":["MS"],"tier":"reliable"},{"code":15500,"name":"Burlington, NC","idxM":79.4,"rankM":768,"idx3":77.9,"rank3":785,"states":["NC"],"tier":"reliable"},{"code":25980,"name":"Hinesville, GA","idxM":79.2,"rankM":769,"idx3":82.7,"rank3":747,"states":["GA"],"tier":"reliable"},{"code":17340,"name":"Clearlake, CA","idxM":79.2,"rankM":770,"idx3":78.6,"rank3":780,"states":["CA"],"tier":"published"},{"code":18300,"name":"Coos Bay-North Bend, OR","idxM":79.1,"rankM":771,"idx3":88.5,"rank3":669,"states":["OR"],"tier":"published"},{"code":45980,"name":"Troy, AL","idxM":79,"rankM":772,"idx3":77.1,"rank3":793,"states":["AL"],"tier":"published"},{"code":47220,"name":"Vineland, NJ","idxM":78.6,"rankM":773,"idx3":81,"rank3":757,"states":["NJ"],"tier":"reliable"},{"code":38220,"name":"Pine Bluff, AR","idxM":78.5,"rankM":774,"idx3":78.8,"rank3":777,"states":["AR"],"tier":"published"},{"code":40140,"name":"Riverside-San Bernardino-Ontario, CA","idxM":78.3,"rankM":775,"idx3":77.8,"rank3":787,"states":["CA"],"tier":"large"},{"code":18420,"name":"Corinth, MS","idxM":78.2,"rankM":776,"idx3":80.6,"rank3":761,"states":["MS"],"tier":"published"},{"code":11500,"name":"Anniston-Oxford, AL","idxM":78.1,"rankM":777,"idx3":79.7,"rank3":772,"states":["AL"],"tier":"reliable"},{"code":15660,"name":"Calhoun, GA","idxM":78.1,"rankM":778,"idx3":79.5,"rank3":773,"states":["GA"],"tier":"published"},{"code":38240,"name":"Pinehurst-Southern Pines, NC","idxM":78,"rankM":779,"idx3":81.8,"rank3":754,"states":["NC"],"tier":"reliable"},{"code":27220,"name":"Jackson, WY-ID","idxM":77.9,"rankM":780,"idx3":81.7,"rank3":755,"states":["WY","ID"],"tier":"published"},{"code":24740,"name":"Greenville, MS","idxM":77.7,"rankM":781,"idx3":75.6,"rank3":799,"states":["MS"],"tier":"published"},{"code":24780,"name":"Greenville, NC","idxM":77.3,"rankM":782,"idx3":76.3,"rank3":796,"states":["NC"],"tier":"reliable"},{"code":15180,"name":"Brownsville-Harlingen, TX","idxM":77.2,"rankM":783,"idx3":75.4,"rank3":802,"states":["TX"],"tier":"reliable"},{"code":40580,"name":"Rocky Mount, NC","idxM":77.1,"rankM":784,"idx3":77,"rank3":794,"states":["NC"],"tier":"reliable"},{"code":40080,"name":"Richmond-Berea, KY","idxM":77,"rankM":785,"idx3":77.7,"rank3":788,"states":["KY"],"tier":"reliable"},{"code":42620,"name":"Searcy, AR","idxM":76.9,"rankM":786,"idx3":77.4,"rank3":792,"states":["AR"],"tier":"published"},{"code":39460,"name":"Punta Gorda, FL","idxM":76.8,"rankM":787,"idx3":78.8,"rank3":778,"states":["FL"],"tier":"reliable"},{"code":46980,"name":"Vicksburg, MS","idxM":76.8,"rankM":788,"idx3":78.8,"rank3":779,"states":["MS"],"tier":"published"},{"code":40460,"name":"Rockingham, NC","idxM":76.7,"rankM":789,"idx3":77.6,"rank3":790,"states":["NC"],"tier":"published"},{"code":42700,"name":"Sebring, FL","idxM":76.5,"rankM":790,"idx3":80.3,"rank3":767,"states":["FL"],"tier":"reliable"},{"code":18060,"name":"Columbus, MS","idxM":76.5,"rankM":791,"idx3":75.5,"rank3":800,"states":["MS"],"tier":"published"},{"code":37540,"name":"Paris, TN","idxM":76.3,"rankM":792,"idx3":80.4,"rank3":764,"states":["TN"],"tier":"published"},{"code":43640,"name":"Slidell-Mandeville-Covington, LA","idxM":76.3,"rankM":793,"idx3":77.7,"rank3":789,"states":["LA"],"tier":"reliable"},{"code":48680,"name":"Wildwood-The Villages, FL","idxM":75.9,"rankM":794,"idx3":74,"rank3":805,"states":["FL"],"tier":"reliable"},{"code":21460,"name":"Enterprise, AL","idxM":75.9,"rankM":795,"idx3":77.5,"rank3":791,"states":["AL"],"tier":"published"},{"code":29300,"name":"LaGrange, GA-AL","idxM":75.8,"rankM":796,"idx3":76.8,"rank3":795,"states":["GA","AL"],"tier":"reliable"},{"code":37120,"name":"Ozark, AL","idxM":75.7,"rankM":797,"idx3":94.1,"rank3":574,"states":["AL"],"tier":"published"},{"code":40660,"name":"Rome, GA","idxM":75.7,"rankM":798,"idx3":75.5,"rank3":801,"states":["GA"],"tier":"reliable"},{"code":20060,"name":"Douglas, GA","idxM":75.6,"rankM":799,"idx3":78.5,"rank3":781,"states":["GA"],"tier":"published"},{"code":49420,"name":"Yakima, WA","idxM":75.2,"rankM":800,"idx3":73.2,"rank3":806,"states":["WA"],"tier":"reliable"},{"code":10500,"name":"Albany, GA","idxM":74.8,"rankM":801,"idx3":75.4,"rank3":803,"states":["GA"],"tier":"reliable"},{"code":45700,"name":"Tifton, GA","idxM":74.7,"rankM":802,"idx3":75.1,"rank3":804,"states":["GA"],"tier":"published"},{"code":37500,"name":"Paragould, AR","idxM":74.6,"rankM":803,"idx3":77.9,"rank3":786,"states":["AR"],"tier":"published"},{"code":20580,"name":"Eagle Pass, TX","idxM":74.6,"rankM":804,"idx3":76.2,"rank3":797,"states":["TX"],"tier":"published"},{"code":20540,"name":"Dyersburg, TN","idxM":74.2,"rankM":805,"idx3":79.8,"rank3":771,"states":["TN"],"tier":"published"},{"code":37260,"name":"Palatka, FL","idxM":74,"rankM":806,"idx3":80.3,"rank3":768,"states":["FL"],"tier":"published"},{"code":48980,"name":"Wilson, NC","idxM":73.7,"rankM":807,"idx3":73.2,"rank3":807,"states":["NC"],"tier":"reliable"},{"code":49740,"name":"Yuma, AZ","idxM":73.7,"rankM":808,"idx3":72.4,"rank3":811,"states":["AZ"],"tier":"reliable"},{"code":31420,"name":"Macon-Bibb County, GA","idxM":73.4,"rankM":809,"idx3":73.1,"rank3":808,"states":["GA"],"tier":"reliable"},{"code":49700,"name":"Yuba City, CA","idxM":73.3,"rankM":810,"idx3":72.5,"rank3":809,"states":["CA"],"tier":"reliable"},{"code":34220,"name":"Moultrie, GA","idxM":73.1,"rankM":811,"idx3":70.9,"rank3":815,"states":["GA"],"tier":"published"},{"code":22500,"name":"Florence, SC","idxM":72.9,"rankM":812,"idx3":72.5,"rank3":810,"states":["SC"],"tier":"reliable"},{"code":32620,"name":"McComb, MS","idxM":72.5,"rankM":813,"idx3":72.3,"rank3":812,"states":["MS"],"tier":"published"},{"code":32580,"name":"McAllen-Edinburg-Mission, TX","idxM":72,"rankM":814,"idx3":70,"rank3":817,"states":["TX"],"tier":"large"},{"code":36660,"name":"Opelousas, LA","idxM":70.7,"rankM":815,"idx3":70.1,"rank3":816,"states":["LA"],"tier":"published"},{"code":18340,"name":"Corbin, KY","idxM":70.5,"rankM":816,"idx3":71.3,"rank3":814,"states":["KY"],"tier":"reliable"},{"code":35340,"name":"New Iberia, LA","idxM":70.1,"rankM":817,"idx3":71.8,"rank3":813,"states":["LA"],"tier":"published"},{"code":29820,"name":"Las Vegas-Henderson-North Las Vegas, NV","idxM":69.9,"rankM":818,"idx3":69.1,"rank3":818,"states":["NV"],"tier":"large"},{"code":23420,"name":"Fresno, CA","idxM":69.8,"rankM":819,"idx3":68.1,"rank3":820,"states":["CA"],"tier":"large"},{"code":25220,"name":"Hammond, LA","idxM":68,"rankM":820,"idx3":67.1,"rank3":824,"states":["LA"],"tier":"reliable"},{"code":29460,"name":"Lakeland-Winter Haven, FL","idxM":67.7,"rankM":821,"idx3":68.4,"rank3":819,"states":["FL"],"tier":"large"},{"code":44700,"name":"Stockton-Lodi, CA","idxM":67.4,"rankM":822,"idx3":68.1,"rank3":821,"states":["CA"],"tier":"large"},{"code":29860,"name":"Laurel, MS","idxM":67.3,"rankM":823,"idx3":67.2,"rank3":823,"states":["MS"],"tier":"published"},{"code":31300,"name":"Lumberton, NC","idxM":67.1,"rankM":824,"idx3":67.5,"rank3":822,"states":["NC"],"tier":"reliable"},{"code":47580,"name":"Warner Robins, GA","idxM":66.3,"rankM":825,"idx3":65.2,"rank3":826,"states":["GA"],"tier":"reliable"},{"code":12540,"name":"Bakersfield-Delano, CA","idxM":64.9,"rankM":826,"idx3":65.7,"rank3":825,"states":["CA"],"tier":"large"},{"code":33700,"name":"Modesto, CA","idxM":64,"rankM":827,"idx3":62.5,"rank3":828,"states":["CA"],"tier":"reliable"},{"code":32900,"name":"Merced, CA","idxM":63.5,"rankM":828,"idx3":62.2,"rank3":829,"states":["CA"],"tier":"reliable"},{"code":20940,"name":"El Centro, CA","idxM":63.2,"rankM":829,"idx3":63.9,"rank3":827,"states":["CA"],"tier":"reliable"},{"code":29900,"name":"Laurinburg, NC","idxM":63.2,"rankM":830,"idx3":61.1,"rank3":830,"states":["NC"],"tier":"published"},{"code":27600,"name":"Jefferson, GA","idxM":58.7,"rankM":831,"idx3":60.4,"rank3":831,"states":["GA"],"tier":"reliable"},{"code":25260,"name":"Hanford-Corcoran, CA","idxM":58.6,"rankM":832,"idx3":56.6,"rank3":832,"states":["CA"],"tier":"published"},{"code":47300,"name":"Visalia, CA","idxM":49.6,"rankM":833,"idx3":51.6,"rank3":833,"states":["CA"],"tier":"reliable"}],"states":[{"code":"AL","name":"Alabama","lon":[-88.7599,-84.6027],"lat":[29.8382,35.391]},{"code":"AK","name":"Alaska","lon":[-183.0812,-126.0403],"lat":[49.6092,72.9632]},{"code":"AZ","name":"Arizona","lon":[-115.2757,-108.5837],"lat":[30.8784,37.458]},{"code":"AR","name":"Arkansas","lon":[-95.016,-89.2435],"lat":[32.7247,36.7792]},{"code":"CA","name":"California","lon":[-125.2316,-113.3124],"lat":[31.7761,42.7675]},{"code":"CO","name":"Colorado","lon":[-109.6218,-101.48],"lat":[36.6715,41.3243]},{"code":"CT","name":"Connecticut","lon":[-73.883,-71.6317],"lat":[40.8999,42.1358]},{"code":"DE","name":"Delaware","lon":[-75.8481,-74.9897],"lat":[38.34,39.9502]},{"code":"DC","name":"District of Columbia","lon":[-77.1366,-76.8926],"lat":[38.7753,39.0119]},{"code":"FL","name":"Florida","lon":[-88.2432,-79.4231],"lat":[24.0028,31.5193]},{"code":"GA","name":"Georgia","lon":[-85.9863,-80.4594],"lat":[29.9864,35.3721]},{"code":"HI","name":"Hawaii","lon":[-160.6799,-154.3731],"lat":[18.6478,22.495]},{"code":"ID","name":"Idaho","lon":[-117.739,-110.5476],"lat":[41.427,49.5622]},{"code":"IL","name":"Illinois","lon":[-91.8344,-87.1752],"lat":[36.5272,42.9515]},{"code":"IN","name":"Indiana","lon":[-88.363,-84.5195],"lat":[37.4526,42.0797]},{"code":"IA","name":"Iowa","lon":[-97.1597,-89.6201],"lat":[40.1284,43.751]},{"code":"KS","name":"Kansas","lon":[-102.6487,-93.993],"lat":[36.7523,40.244]},{"code":"KY","name":"Kentucky","lon":[-90.18,-81.3564],"lat":[36.2851,39.3595]},{"code":"LA","name":"Louisiana","lon":[-94.4612,-88.3989],"lat":[28.6025,33.3466]},{"code":"ME","name":"Maine","lon":[-71.4146,-66.6192],"lat":[42.7078,47.8117]},{"code":"MD","name":"Maryland","lon":[-79.8427,-74.6938],"lat":[37.7668,39.868]},{"code":"MA","name":"Massachusetts","lon":[-73.7945,-69.6419],"lat":[41.1061,43.0185]},{"code":"MI","name":"Michigan","lon":[-91.0585,-81.7726],"lat":[41.1765,48.7106]},{"code":"MN","name":"Minnesota","lon":[-97.8592,-88.8692],"lat":[43.0286,49.8552]},{"code":"MS","name":"Mississippi","lon":[-91.9396,-87.8133],"lat":[29.7882,35.3818]},{"code":"MO","name":"Missouri","lon":[-96.3088,-88.5648],"lat":[35.6262,40.9831]},{"code":"MT","name":"Montana","lon":[-117.0108,-103.0783],"lat":[43.9865,49.3725]},{"code":"NE","name":"Nebraska","lon":[-104.7531,-94.6087],"lat":[39.7599,43.2418]},{"code":"NV","name":"Nevada","lon":[-120.483,-113.5624],"lat":[34.4418,42.5622]},{"code":"NH","name":"New Hampshire","lon":[-72.7055,-70.5555],"lat":[42.4883,45.5142]},{"code":"NJ","name":"New Jersey","lon":[-75.6914,-73.7608],"lat":[38.7342,41.5517]},{"code":"NM","name":"New Mexico","lon":[-109.534,-102.5181],"lat":[30.8789,37.4537]},{"code":"NY","name":"New York","lon":[-80.3946,-71.2239],"lat":[40.1345,45.3774]},{"code":"NC","name":"North Carolina","lon":[-85.0309,-74.7496],"lat":[33.625,36.8076]},{"code":"ND","name":"North Dakota","lon":[-104.6485,-95.955],"lat":[45.6898,49.2458]},{"code":"OH","name":"Ohio","lon":[-85.1643,-80.1746],"lat":[38.1173,42.2635]},{"code":"OK","name":"Oklahoma","lon":[-103.6883,-93.7455],"lat":[33.3457,37.2731]},{"code":"OR","name":"Oregon","lon":[-125.1996,-115.8164],"lat":[41.6495,46.6133]},{"code":"PA","name":"Pennsylvania","lon":[-80.9863,-74.2231],"lat":[39.5161,42.4738]},{"code":"RI","name":"Rhode Island","lon":[-71.9221,-71.0612],"lat":[41.0765,42.0886]},{"code":"SC","name":"South Carolina","lon":[-83.7381,-78.1576],"lat":[31.7794,35.4699]},{"code":"SD","name":"South Dakota","lon":[-104.6674,-95.8269],"lat":[42.2024,46.2227]},{"code":"TN","name":"Tennessee","lon":[-91.0027,-80.9539],"lat":[34.8474,36.8137]},{"code":"TX","name":"Texas","lon":[-107.6958,-92.4661],"lat":[24.9843,37.3538]},{"code":"UT","name":"Utah","lon":[-114.4539,-108.6401],"lat":[36.5977,42.4019]},{"code":"VT","name":"Vermont","lon":[-73.5956,-71.3072],"lat":[42.5437,45.1998]},{"code":"VA","name":"Virginia","lon":[-84.35,-74.5678],"lat":[36.3067,39.7]},{"code":"WA","name":"Washington","lon":[-125.3585,-116.2906],"lat":[45.2668,49.2792]},{"code":"WV","name":"West Virginia","lon":[-83.0388,-77.3255],"lat":[36.9265,40.9138]},{"code":"WI","name":"Wisconsin","lon":[-93.3747,-86.3188],"lat":[42.1251,47.4434]},{"code":"WY","name":"Wyoming","lon":[-111.6173,-103.4918],"lat":[40.6739,45.3268]}],"meta":{"span":40,"nExcluded":90,"nScored":923,"anchor":"May 2026","month":"September 2026","window3":"July–September 2026","fileTag":"2026-09","measures":{"month":{"field":"idxM","rankField":"rankM","period":"September 2026","label":"September 2026","nMetros":833,"nLarge":160,"clampedLo":3,"clampedHi":3},"3mo":{"field":"idx3","rankField":"rank3","period":"3-month average, Jul–Sep 2026","label":"3-month average","nMetros":833,"nLarge":160,"clampedLo":2,"clampedHi":2}},"defaultMeasure":"3mo"}};
+  var ALL = DATA.metros, STATES = DATA.states, META = DATA.meta;
+
+  // ---- measure -------------------------------------------------------------
+  // Two measures can ship: the 3-month moving average and the single month. Every
+  // area carries both (idx3 / rank3, idxM / rankM). setMeasure() points m.idx,
+  // m.rank and the per-measure counts in META at the chosen one, so the rest of
+  // the page reads them unchanged; METROS is the areas with a value under it.
+  var METROS, measure;
+  function setMeasure(key) {
+    var M = META.measures[key];
+    measure = key;
+    METROS = ALL.filter(function (m) { return m[M.field] !== null; });
+    METROS.forEach(function (m) { m.idx = m[M.field]; m.rank = m[M.rankField]; });
+    META.period = M.period;
+    META.nMetros = M.nMetros; META.nLarge = M.nLarge;
+    META.clampedLo = M.clampedLo; META.clampedHi = M.clampedHi;
+  }
+  setMeasure(META.defaultMeasure);
+  var measureSel = document.getElementById("measure");
+  [META.defaultMeasure].concat(Object.keys(META.measures).filter(function (k) {
+    return k !== META.defaultMeasure;
+  })).forEach(function (k) {
+    var o = document.createElement("option");
+    o.value = k;
+    o.textContent = META.measures[k].label;
+    measureSel.appendChild(o);
+  });
+  document.getElementById("field-measure").hidden = Object.keys(META.measures).length < 2;
+
+  // The index is on a fixed scale, so "100" is the baseline month's median, not
+  // this month's: say which.
+  function SCALE_TEXT() {
+    return "Fixed scale: 100 is the " + META.anchor + " median area and 15 points one " +
+      META.anchor + " standard deviation, so values compare across months" +
+      (measure === "3mo" ? "; the 3-month figure averages the monthly index. " : ". ");
+  }
+
+  var FONT = '"Noto Sans", system-ui, -apple-system, "Segoe UI", sans-serif';
+  var fmt1   = new Intl.NumberFormat("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  var signed = function (v) { return (v >= 0 ? "+" : "−") + fmt1.format(Math.abs(v)); };
+
+  // ---- theme ---------------------------------------------------------------
+  var themeParam = new URLSearchParams(location.search).get("theme");
+  function resolveTheme() {
+    if (themeParam === "dark" || themeParam === "light") return themeParam;
+    if (themeParam === "auto") {
+      return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    return "light";
+  }
+  document.documentElement.dataset.theme = resolveTheme();
+  if (themeParam === "auto") {
+    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () {
+      document.documentElement.dataset.theme = resolveTheme();
+      render();
+      renderTable();   // the chips are painted from the theme tokens
+    });
+  }
+  var css = function (name) {
+    return getComputedStyle(document.querySelector(".viz-root")).getPropertyValue(name).trim();
+  };
+
+  // ---- controls ------------------------------------------------------------
+  var modeSel  = document.getElementById("mode");
+  var nInput   = document.getElementById("n");
+  var nOut     = document.getElementById("n-out");
+  var stateSel = document.getElementById("state");
+  var sizeSel  = document.getElementById("size");
+  var fieldN    = document.getElementById("field-n");
+  var fieldSt   = document.getElementById("field-state");
+  var fieldMode = document.getElementById("field-mode");
+  var fieldSize = document.getElementById("field-size");
+
+  STATES.forEach(function (s) {
+    var o = document.createElement("option");
+    o.value = s.code;
+    o.textContent = s.name;
+    stateSel.appendChild(o);
+  });
+  stateSel.value = "TX";
+
+  // The notebook reports tightest/slackest on metros with >= 10k postings and
+  // flags everything under 2k as thin, so those are the two universes offered.
+  // Default matches the notebook's published chart.
+  // Filtering is on a precomputed size tier, not a posting count: the raw counts
+  // are deliberately absent from the payload so they are not published. The
+  // thresholds themselves are methodology and stay visible.
+  // Posting thresholds define these tiers but are not shown in the control; the
+  // footnote carries the definitions so the labels stay clean.
+  var SIZES = [
+    { value: "large",     tiers: ["large"],                            label: "Large markets" },
+    { value: "published", tiers: ["large", "reliable", "published"],   label: "All publishable" }
+  ];
+  SIZES.forEach(function (s) {
+    var o = document.createElement("option");
+    o.value = s.value;
+    o.textContent = s.label;
+    sizeSel.appendChild(o);
+  });
+
+  function universe() {
+    var tiers = SIZES.find(function (s) { return s.value === sizeSel.value; }).tiers;
+    return METROS.filter(function (m) { return tiers.indexOf(m.tier) !== -1; });
+  }
+
+  // "Minneapolis-St. Paul-Bloomington, MN-WI" is unreadable as an axis tick, so
+  // long names collapse to lead city + states. The full name stays in the
+  // tooltip and the table, which is where the value lives anyway.
+  // nameMax is set per render from the measured gutter width.
+  var nameMax = 30;
+  function shortName(name) {
+    if (name.length <= nameMax) return name;
+    var comma = name.lastIndexOf(",");
+    var out = comma === -1 ? name : name.slice(0, comma).split("-")[0] + name.slice(comma);
+    return out.length <= nameMax ? out : out.slice(0, nameMax - 1) + "…";
+  }
+
+  // ---- selection -----------------------------------------------------------
+  function selection() {
+    var pool = universe(), mode = modeSel.value;
+    if (mode === "state") {
+      return pool
+        .filter(function (m) { return m.states.indexOf(stateSel.value) !== -1; })
+        .slice()
+        .sort(function (a, b) { return b.idx - a.idx; });
+    }
+    var n = +nInput.value;
+    var sorted = pool.slice().sort(function (a, b) {
+      return mode === "tightest" ? b.idx - a.idx : a.idx - b.idx;
+    });
+    // Slackest reads bottom-up like the tightest view: worst at the bottom.
+    return sorted.slice(0, n).sort(function (a, b) { return b.idx - a.idx; });
+  }
+
+  // theme_aurora(axis_titles = FALSE) hides axis titles, so the subtitle is what
+  // carries the unit. Every branch below has to name the index and its anchor.
+  function headline() {
+    var size = SIZES.find(function (s) { return s.value === sizeSel.value; });
+    var scope = size.value === "large" ? "large markets" : "all publishable markets";
+    if (modeSel.value === "state") {
+      var st = STATES.find(function (s) { return s.code === stateSel.value; });
+      return { title: "The Indeed Labor Market Tightness Index in " + st.name,
+               sub: META.period + ", " + scope + ", ranked tightest to slackest. 100 = " +
+                    META.anchor + " median area." };
+    }
+    var n = +nInput.value;
+    return {
+      title: modeSel.value === "tightest"
+        ? "The " + n + " tightest metro and micropolitan labor markets"
+        : "The " + n + " slackest metro and micropolitan labor markets",
+      sub: "The Indeed Labor Market Tightness Index, " + META.period + ", " + scope +
+           ". 100 = " + META.anchor + " median area; 15 points is one standard deviation."
+    };
+  }
+
+  // ---- chart ---------------------------------------------------------------
+  var plotEl = document.getElementById("plot");
+  var noteEl = document.getElementById("note");
+
+  // Which view is showing is state, not a one-shot side effect of clicking the
+  // toggle: every later render has to honour it, or moving the slider while the
+  // table is up pops the chart back over it.
+  var tableView = false;
+
+  // Fixed plot height so the page height never changes — see render().
+  var PLOT_H = 600;
+
+  // The most recent {data, layout} render() produced.
+  var lastFig = null;
+
+  function barTrace(rows, name, color, keep) {
+    var subset = rows.filter(keep);
+    return {
+      type: "bar",
+      orientation: "h",
+      name: name,
+      // Bars grow from 100, not from zero: 100 is the baseline month's median, so
+      // the meaningful quantity is the deviation and zero has no interpretation.
+      base: subset.map(function () { return 100; }),
+      x: subset.map(function (m) { return m.idx - 100; }),
+      y: subset.map(function (m) { return shortName(m.name); }),
+      customdata: subset.map(function (m) {
+        return [m.name, fmt1.format(m.idx), signed(m.idx - 100), m.rank];
+      }),
+      marker: { color: color, line: { width: 0 } },
+      width: 0.72,                       // leaves a surface gap between bars
+      hovertemplate:
+        "<b>%{customdata[0]}</b><br>" +
+        "Tightness index <b>%{customdata[1]}</b> (%{customdata[2]} vs. 100)<br>" +
+        "National rank %{customdata[3]} of " + META.nMetros +
+        "<extra></extra>"
+    };
+  }
+
+  // No control may change the page height: the embeds are fixed-height iframes.
+  // The copy differs in length between the two measures, and the subtitle also
+  // between modes and size filters, so the subtitle, footnote and table caption
+  // reserve the tallest version at the current width. The table panel is shown
+  // for the measurement only; all of this runs before the browser paints, so
+  // nothing flickers.
+  function lockCopyHeight() {
+    var sub = document.getElementById("subtitle"), foot = document.getElementById("footnote");
+    var els = [sub, foot, caption];
+    var keep = measure, keepMode = modeSel.value, keepSize = sizeSel.value, max = [0, 0, 0];
+    var panelOn = wrap.classList.contains("on");
+    wrap.classList.add("on");
+    els.forEach(function (e) { e.style.minHeight = ""; });
+    Object.keys(META.measures).forEach(function (k) {
+      setMeasure(k);
+      ["tightest", "state"].forEach(function (mode) {
+        SIZES.forEach(function (sz) {
+          modeSel.value = mode; sizeSel.value = sz.value;
+          sub.textContent = headline().sub;
+          max[0] = Math.max(max[0], sub.getBoundingClientRect().height);
+        });
+      });
+      foot.textContent = SOURCE_TEXT();
+      caption.textContent = TABLE_CAPTION();
+      [1, 2].forEach(function (i) { max[i] = Math.max(max[i], els[i].getBoundingClientRect().height); });
+    });
+    modeSel.value = keepMode; sizeSel.value = keepSize;
+    setMeasure(keep);
+    if (!panelOn) wrap.classList.remove("on");
+    sub.textContent = headline().sub;
+    foot.textContent = SOURCE_TEXT();
+    if (!search.value.trim()) caption.textContent = TABLE_CAPTION();
+    els.forEach(function (e, i) { e.style.minHeight = max[i] + "px"; });
+  }
+
+  function render() {
+    lockCopyHeight();
+    var rows = selection();
+    var h = headline();
+    document.getElementById("title").textContent = h.title;
+    document.getElementById("subtitle").textContent = h.sub;
+
+    if (!rows.length) {
+      Plotly.purge(plotEl);
+      plotEl.style.display = "none";
+      noteEl.hidden = false;
+      noteEl.textContent = "No area in this state qualifies as a large market. " +
+        "Try “All publishable” under Market size.";
+      return;
+    }
+    noteEl.hidden = true;
+    plotEl.style.display = tableView ? "none" : "";
+    if (tableView) return;   // no point laying out a chart that is hidden
+
+    // Constant plot height, whatever the slider says. These charts are embedded
+    // in fixed-height iframes (Advanced iFrames does no cross-domain auto-sizing),
+    // so a height that grew with N would clip at the bottom or leave dead space.
+    // Bars thin out instead, and the tick font steps down as rows get tight.
+    var height = PLOT_H;
+    plotEl.style.height = height + "px";
+
+    var band = (height - 74) / rows.length;
+    var tickSize = band < 11 ? 9
+                 : band < 14 ? 10
+                 : band < 17 ? 11
+                 : band < 24 ? 13
+                 : 14;
+
+    // Long metro names have to fit the left gutter, which is narrow on a 779px
+    // embed; the gutter scales with the plot and the labels are cut to match.
+    var plotW = plotEl.getBoundingClientRect().width || 779;
+    var leftPx = Math.round(Math.min(220, Math.max(104, plotW * 0.33)));
+    nameMax = Math.max(12, Math.floor((leftPx - 12) / (tickSize * 0.58)));
+
+    var tight = barTrace(rows, "Above 100 (tighter)", css("--tight"),
+                         function (m) { return m.idx >= 100; });
+    var slack = barTrace(rows, "Below 100 (slacker)", css("--slack"),
+                         function (m) { return m.idx < 100; });
+
+    // Direct-label the extremes only. Every other value is one hover — or one
+    // click on Table — away; a number on every bar is noise.
+    var maxRow = rows[0], minRow = rows[rows.length - 1];
+    var labels = [];
+    function label(m, side) {
+      labels.push({
+        x: m.idx, y: shortName(m.name), text: fmt1.format(m.idx),
+        xanchor: side === "right" ? "left" : "right",
+        xshift: side === "right" ? 6 : -6,
+        yanchor: "middle", showarrow: false,
+        font: { size: 11, family: FONT, color: css("--text-secondary") }
+      });
+    }
+    label(maxRow, maxRow.idx >= 100 ? "right" : "left");
+    if (minRow !== maxRow) label(minRow, minRow.idx >= 100 ? "right" : "left");
+
+    // The axis must include 100. Bars are drawn from 100, so an axis starting at,
+    // say, 115 would render a 148 bar three times the length of a 123 bar when the
+    // real deviations are 48 and 23 — the classic truncated-baseline distortion.
+    var vals = rows.map(function (m) { return m.idx; });
+    var pad = Math.max(4, Math.max.apply(null, vals.map(function (v) {
+      return Math.abs(v - 100);
+    })) * 0.14);
+    var lo = Math.min.apply(null, vals.concat(100)) - pad;
+    var hi = Math.max.apply(null, vals.concat(100)) + pad;
+
+    var layout = {
+      barmode: "overlay",
+      bargap: rows.length > 24 ? 0.2 : 0.28,
+      height: height,
+      // b is tight because theme_aurora(axis_titles = FALSE) means there is no
+      // axis title under the ticks — the subtitle carries the unit instead.
+      margin: { t: 30, r: 26, b: 30, l: leftPx },
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: FONT, size: 12, color: css("--text-secondary") },
+      xaxis: {
+        range: [lo, hi],
+        zeroline: false,
+        // theme_aurora(grid = "X") for a horizontal bar chart: vertical rules
+        // only, at grid_colour. theme_aurora(axis = "x") draws the axis line in
+        // base_colour, which is why this is --axis and not --gridline.
+        gridcolor: css("--gridline"), gridwidth: 1, griddash: "solid",
+        linecolor: css("--axis"), linewidth: 1,
+        ticks: "", tickfont: { size: 11, family: FONT }, fixedrange: true
+      },
+      yaxis: {
+        categoryorder: "array",
+        categoryarray: rows.map(function (m) { return shortName(m.name); }).reverse(),
+        autorange: true,
+        showgrid: false, zeroline: false,
+        linecolor: "rgba(0,0,0,0)",
+        ticks: "", tickfont: { size: tickSize, family: FONT, color: css("--text-primary") },
+        fixedrange: true
+      },
+      shapes: [{
+        // 100 is the baseline these bars grow from, so it is drawn as a
+        // solid axis rule, not a dashed threshold — in theme_aurora's axis colour
+        // (base_colour), the same weight as the x-axis line it stands in for.
+        type: "line", x0: 100, x1: 100, y0: 0, y1: 1, yref: "paper",
+        line: { color: css("--axis"), width: 1 }
+      }],
+      annotations: labels,
+      legend: {
+        // theme_aurora() puts the legend on top, horizontal, right-justified.
+        orientation: "h", y: 1.06, yanchor: "bottom", x: 1, xanchor: "right",
+        font: { size: 11, family: FONT }, itemclick: false, itemdoubleclick: false
+      },
+      // Two colours on screen need a key; one colour does not — the title and the
+      // axis already say which side of 100 everything is on.
+      showlegend: tight.y.length > 0 && slack.y.length > 0,
+      hoverlabel: {
+        bgcolor: css("--surface-1"), bordercolor: css("--baseline"),
+        font: { color: css("--text-primary"), size: 14, family: FONT },
+        align: "left"
+      },
+      dragmode: false
+    };
+
+    // Kept so the PNG export can rebuild from exactly what is on screen.
+    lastFig = { data: [tight, slack], layout: layout };
+
+    Plotly.react(plotEl, [tight, slack], layout, {
+      responsive: true, displaylogo: false,
+      modeBarButtonsToRemove: ["select2d", "lasso2d", "zoom2d", "pan2d",
+                               "zoomIn2d", "zoomOut2d", "autoScale2d", "resetScale2d",
+                               "toImage"],
+      modeBarButtonsToAdd: [CAMERA_BUTTON]
+    });
+  }
+
+  function TABLE_CAPTION() {
+    return "The Indeed Labor Market Tightness Index, " + META.period + ", for all " +
+      META.nMetros + " publishable areas — sortable, searchable, and downloadable as CSV.";
+  }
+
+  // ---- table view ----------------------------------------------------------
+  // The table is the full published set, not a mirror of the chart. The chart
+  // controls answer "who is at the top"; the table answers "where does MY area
+  // sit", which needs every row, so the Show / N / state / size controls
+  // deliberately do not scope it. Search and column sort scope it instead.
+  var tbody   = document.getElementById("tbody");
+  var search  = document.getElementById("search");
+  var empty   = document.getElementById("empty");
+  var caption = document.getElementById("tcaption");
+
+  // Rank ascending is tightest-first, which is the chart's default reading order.
+  var sortKey = "rank", sortDir = 1;
+  var TH = { rank: document.getElementById("th-rank"),
+             name: document.getElementById("th-name"),
+             idx:  document.getElementById("th-idx") };
+
+  function renderTable() {
+    var q = search.value.trim();
+    var needle = q.toLowerCase();
+    // Matching the whole title also matches the trailing state codes, so "MN"
+    // works as a state filter without a second control.
+    var rows = METROS.filter(function (m) {
+      return !needle || m.name.toLowerCase().indexOf(needle) !== -1;
+    });
+    rows.sort(function (a, b) {
+      if (sortKey === "name") return sortDir * a.name.localeCompare(b.name);
+      if (sortKey === "idx")  return sortDir * (a.idx - b.idx);
+      return sortDir * (a.rank - b.rank);
+    });
+
+    Object.keys(TH).forEach(function (k) {
+      if (k === sortKey) {
+        TH[k].setAttribute("aria-sort", sortDir === 1 ? "ascending" : "descending");
+        TH[k].querySelector(".arrow").textContent = sortDir === 1 ? "▲" : "▼";
+      } else {
+        TH[k].removeAttribute("aria-sort");
+      }
+    });
+
+    caption.textContent = q
+      ? rows.length + (rows.length === 1 ? " area" : " areas") +
+        " matching “" + q + "” of " + META.nMetros
+      : TABLE_CAPTION();
+
+    tbody.replaceChildren();
+    var frag = document.createDocumentFragment();
+    rows.forEach(function (m) {
+      var tr = document.createElement("tr");
+      function cell(text, cls) {
+        var td = document.createElement("td");
+        if (cls) td.className = cls;
+        td.textContent = text;
+        return td;
+      }
+      tr.appendChild(cell(m.rank, "num"));
+
+      var td = document.createElement("td");
+      td.className = "metro";
+      var chip = document.createElement("span");
+      chip.className = "chip";
+      chip.style.background = m.idx >= 100 ? css("--tight") : css("--slack");
+      td.appendChild(chip);
+      td.appendChild(document.createTextNode(m.name));
+      tr.appendChild(td);
+
+      tr.appendChild(cell(fmt1.format(m.idx), "num"));
+      tr.appendChild(cell(signed(m.idx - 100), "num"));
+      frag.appendChild(tr);
+    });
+    tbody.appendChild(frag);
+    empty.hidden = rows.length > 0;
+  }
+
+  Object.keys(TH).forEach(function (k) {
+    TH[k].querySelector("button").addEventListener("click", function () {
+      // Re-clicking the active column flips it; a new column starts in the
+      // direction that reads as "best first" for that column.
+      if (sortKey === k) sortDir = -sortDir;
+      else { sortKey = k; sortDir = k === "idx" ? -1 : 1; }
+      renderTable();
+    });
+  });
+  search.addEventListener("input", renderTable);
+
+  // ---- wiring --------------------------------------------------------------
+  // Chart-only controls. In table view they are hidden outright rather than
+  // greyed: the table is the full published set and none of these four scope it,
+  // so leaving them on screen over it is a false affordance — the reader would
+  // move the slider and watch nothing happen. Download CSV and the view toggle
+  // stay, because both mean the same thing in either view.
+  function syncControls() {
+    var byState = modeSel.value === "state";
+    fieldMode.hidden = tableView;
+    fieldSize.hidden = tableView;
+    fieldN.hidden  = tableView || byState;   // the slider only means something for a top-N cut
+    fieldSt.hidden = tableView || !byState;  // and the state picker only for the by-state cut
+  }
+  modeSel.addEventListener("change", function () { syncControls(); render(); });
+  nInput.addEventListener("input", function () {
+    nOut.textContent = nInput.value;
+    render();
+  });
+  stateSel.addEventListener("change", render);
+  sizeSel.addEventListener("change", render);
+
+  var btnChart = document.getElementById("btn-chart");
+  var btnTable = document.getElementById("btn-table");
+  var wrap     = document.getElementById("table-wrap");
+  function setView(showTable) {
+    tableView = showTable;
+    btnChart.setAttribute("aria-pressed", String(!showTable));
+    btnTable.setAttribute("aria-pressed", String(showTable));
+    wrap.classList.toggle("on", showTable);
+    syncControls();   // the chart-only filters come and go with the view
+    if (showTable) {
+      plotEl.style.display = "none";
+    } else {
+      // Re-render: while the table was up, control changes deliberately skipped
+      // laying out the chart, so it may be stale.
+      render();
+      Plotly.Plots.resize(plotEl);
+    }
+  }
+  btnChart.addEventListener("click", function () { setView(false); });
+  btnTable.addEventListener("click", function () { setView(true); });
+
+  // Single source for the string the footer and the PNG export both use.
+  function SOURCE_TEXT() {
+    return "Source: Indeed Hiring Lab. Indeed Labor Market Tightness Index, " +
+      META.period + ". " +
+      META.nMetros + " US metro and micropolitan areas (CBSAs), from seekers per " +
+      "posting, engagement per seeker, paid effort and concentration. " + SCALE_TEXT() +
+      "Higher reads tighter; bars start at 100. " +
+      "“Large markets” are the " + META.nLarge + " highest-volume areas; " +
+      "“all publishable” is all " + META.nMetros + ". " +
+      META.nExcluded + " of the " + META.nScored + " scored areas are withheld for " +
+      "low posting volume.";
+  }
+  function renderFootnote() { document.getElementById("footnote").textContent = SOURCE_TEXT(); }
+  renderFootnote();
+  measureSel.addEventListener("change", function () {
+    setMeasure(measureSel.value);
+    renderFootnote();
+    render();
+    renderTable();
+    postHeight();
+  });
+
+  // Tell a parent page how tall we are. Advanced iFrames does not auto-size
+  // cross-domain embeds, so the documented fixed height is the default path and
+  // this is only useful if a listener is added on the WordPress side. It is a
+  // no-op otherwise.
+  function postHeight() {
+    try {
+      parent.postMessage({ type: "hiringlab-embed-height",
+                           id: "tightness-bars",
+                           height: document.documentElement.scrollHeight }, "*");
+    } catch (e) { /* sandboxed or no parent — nothing to do */ }
+  }
+  addEventListener("load", postHeight);
+  addEventListener("resize", postHeight);
+  ["measure", "mode", "n", "state", "size"].forEach(function (id) {
+    document.getElementById(id).addEventListener("change", postHeight);
+  });
+  btnChart.addEventListener("click", postHeight);
+  btnTable.addEventListener("click", postHeight);
+
+  // ---- branded PNG export --------------------------------------------------
+  // Plotly's own camera button captures the plot area and nothing else, so the
+  // file lands with no title, no source line and no logo — the chart arrives in
+  // someone's deck unattributed. Replacing the button lets the export be composed
+  // the way aurora_save() composes a PNG: title and subtitle above, source line
+  // bottom-left, Indeed logo bottom-right, at the 1559x922 that
+  // ggsave_aurora_blog(size = "body") writes.
+  //
+  // Plotly.downloadImage accepts a figure object as well as a graph div, so the
+  // export layout is a throwaway copy and the on-screen chart is never touched.
+  var EXPORT_W = 1559, EXPORT_H = 922;   // ggsave_aurora_blog(size = "body")
+  var LOGO_PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABaEAAAGBCAYAAAB/3X12AAAACXBIWXMAAC4jAAAuIwF4pT92AAAgAElEQVR4nO3dS3ZTSbo/7F21ql/+jyCdI0hnVx3MCNKMANNQGxgBMAKgrQbOEUCOANNRF+cIcI7gqEbwfWsrQkgYX3TZl7g8z1p5supUppG3FNqxf/HGG/9qICWT2XHTNMfxFW3+55Vfbvn/3XTdNM0/N/5/V03TLL7/5/l0cf+PAAAAAAC6IIRmWJPZSdM0R03TnDZN89+maU7in386wjux2Ain/47h9XUzn176VAAAAABAN4TQ9COEzSexavnRHVXNKbuOf32JQXVbPX3t0wIAAAAAuxFCc7h14Pxb/PsYVc1DuI6BdBtMXzbz6ZVPDwAAAADcTwjN7kLofBornE9je40atW08Pm2E0iqlAQAAAOAGITQPEzpvq62M/lOVNAAAAACsCaH52WS2Ojjwj/j3nHo5p+I6BtIXKqQBAAAAqJkQmmAyO94Ins9clU61VdHvl6075tNFQb8XAAAAADxICF2zEDy3gfPTeKAg/btYBtLadQAAAABQCSF0jSaz8xg8n9Z+KUZ0FcPoi2qvAAAAAABVEELXIlQ9t+HzcwcLJuU6tuq40KoDAAAAgBIJoUs3mZ3Gqufz2i9F4hYxjH4njAYAAACgJELoUk1mZ7HqWcuNvAijAQAAACiKELo0od/zq6Zpjmu/FJlrA+iXekYDAAAAkDshdCmEz6Vqe0Y/a+bTy9ovBAAAAAB5EkLnTvhci0+xMvq69gsBAAAAQF6E0LkSPtco9IueT1/XfiEAAAAAyIcQOjfCZ5rmKrbouHItAAAAAEidEDoXk9lpDJ9Pa78UfPdGVTQAAAAAqRNCp24yayue3zZNc1b7peBWqqIBAAAASJoQOlWT2VHTNC9i9TM8pD208J2rBAAAAEBqhNApCn2f2+rno9ovRdM0l7f8/9qq3//d8c//dst1O66kh/anWBW9SOC1AAAAAMCSEDolk9lJDJ9r6Pt8Hf9aBcqr/9408+ltwXM3QnuTVSC9us6Pbvz3nLXX8In2HAAAAACkQgidgtB641Vsv1GaVdD8d/z7ddIBaXgvTuJfv8S/5xZOL2J7josEXgsAAAAAlRNCj20yO4vVzyW0i9gMnC97rWgeWqhSP4ntPk7jf07du2Y+fVnMewAAAABAloTQYwkVtx+apjnL+Le4jj2bv8TQ+TqB1zScyew0BtKPEq6WvohV0fpEAwAAADAKIfQYQvXzhwwPHlzE0PmvKkPnh4T39VFcWEipsr2tTn8siAYAAABgDELoIeVZ/dwGzZ+WwXNJ7TX6Fg5AbN/np4m07hBEAwAAADAKIfRQ8qp+XgXPfyZ9iGAuQiB9HgPpMSukBdEAAAAADE4I3bdQ/fyqaZoXib9SwfMQQh/ppzGUHoMgGgAAAIBBCaH7NJm1bRg+JtYfeNNiI3jWamNIYXGiDaKfj/D5EEQDAAAAMBghdF8ms7by+W2ir64NId8vA2hB5PhCdXRbLX864GsRRAMAAAAwCCF010KF68eBA8VtXSzDZ+020hR6R78asFWHIBoAAACA3gmhuxTab3xO7PDBRax6fidszEQIo5/HMLrvz9JFM58+K+baAQAAAJAcIXRX0mu/0R40+KaZTy8SeC3sI1TVv4iBdJ9hdLtA8dJ7BAAAAEAfhNCHCkHh2wFbKDzkMrbc+JTI6+FQ6zD6VY/X8pkFCwAAAAD6IIQ+RGi/8aFpmpMEXs1lrHy+TOC10Id+e0YvYn9o/cIBAAAA6JQQel+T2Wk8gHDs/s/C59qEMLqtvj/r+DdvW7j8rnc4AAAAAF0SQu8jjf7PbcXqS+FzxcJCyNuOK/EdVAgAAABAp4TQu5rMPozc/9mBg/xoMjuPYXRXVflP9BQHAAAAoCtC6G2Fw+Ha9hunI72CRTxw8PVIfz4p6/bwQm05AAAAAOjMv13KLYQevJ9HDKDbqudfBdDcqQ2Mw+fj19gn/BDHMdAGAAAAgIOphH7IZHYSA+gxDiC8jH2fr0b4s8lZNy062oWPa58DAAAAAA6hEvo+4eC3MQLotg3Cs2Y+fSyAZi+hZ3hbFf3ugAvYRWsPAAAAACqnEvouoZL0wwh/8rt48KB+vHQjLKa0VdEne/w81dAAAAAAHEQl9G3GCaDboK+tfH4pgKZT8+nl8rO1X1X0uTcDAAAAgEOohL5pMns9QhuCNw4dZBCT2VlcYNm2xcx1M5/+6s0BAAAAYF9C6E2T2YeBKz+vYu9nfZ8ZzmR2FIPosy3/zN99RgEAAADYl3YcK8MH0G31s3CP4bXtXubTJ03TPImHYD5k27AaAAAAAH4ihG4GD6BXvZ+132Bc8+mn5cGDD/eK/s07BQAAAMC+hNDDBtAXsbXB5UB/HtwvVEW/XH4um8bnEgAAAIDO1d0TergAehF7P38a4M+C/U1mJ03TPG+a5rRpmuP42X1i4QQAAACAfdUbQg8XQF/FEO96gD8LAAAAACApdYbQwwXQ72KrAwAAAACAKtUXQg8TQGu/AQAAAABUr/Wfqq7CZPZigABa+w0AAAAAgOjf1VyIyawNn9/2/KdcNE3zWAANAAAAABDU0Y4jBNAfev5TXjbz6bue/wwAAAAAgKyUH0JPZidN03zt8U/Q/xkA4KbJ7LhpmpP4129N0xzFf+L0xj95Hf9qYluzf5Z/n08vXVMAANjRZHYU5+DtvPuXpmmO4w842ZiTNzHTvIr/+fr7PDzMxTvv8lB2CB0C6M83LnCXrmIAfdXTzwcAyEeYez1tmuZsY7J7iHaR/8uy5dl8uvBJAACAW4QCkLM4Fz/p4BJdx7n4X10Vh5QbQofU/1vPAfRjD0QAQPVC67NXHQXPd2knwe9VSAMAQDSZncZ5+M3dhl1qA+k/m6Z5d0gOWmYIHQLozx0l/7dpq3Ge9fSzAQDyMJmdxYOf+wyfb7qMZ3HYiQYAQJ3CDsS3PYfPNy1iUcjrff7lUkPozz2+CW/2vdgAAEUIC/4fB5703tRWYrz0gQIAoCqTWRs+vxjxV96rPXF5IfRk9qFpmvOefnp7gS96+tkAAOnr/8yNXbQT3yd9HJwCAABJ6b/zw67a3Ynvtv13/p3UxTxU6EfYRwC9EEADANULc62viQTQTZyAf43BOAAAlCnMd78lFEA3y3YgoRh4K+VUQodG3J97+MmLeAChvoMAQL1CAL31JHNg5msAAJQprZ2It9nq7LwyQuj+3gwPNAAA/S32d8m8DQCAsoQWHF8HPgh8Hw8G0fm34whvxgcBNABADyaz43gIYepCj7zwegEAoASfMwigm2V75Mns9X3/QAk9oT/00A+lDZ5/FUADACwD6FS3/t10lHDLEAAA2N5k9jaxHtAPeRV3UN4q7xB6MnvRNM1Zxz/1KlZALzr+uQAAeQnVDLkd+nca54gAAJCnEObmOKf9ELtW/CTfEDq8GW87/qkCaACA5vuZG68yvRav7pr8AgBABrrOPIdyfFd4nmcIHR4quu5NKIAGAFjLdeLbxLYcOb9+AABqNZmdZ7gbcdPz2wpCcq2E7ro3oQAaAGAl7Di7s59bJs5VQwMAkKFcdyOuHN1WDZ1fCB16E3b5UCSABgD4Ue4T3xW9oQEAyEeogj4u4B37qRr6P+O9lj2EqpwuH4oE0F0KvSNP4mB5FH/yyRZV69fxr/Z9+Du+L1fNfHqdzy8PAIWYzI4LqIJeedo0zes0XgoAADzoeSGXqM0Cz5qmuVj9P/417uvZQUjPv3XYhqMNPH8VQB9gvVX3UU8Pq+17c9k0zZemaT4JpQFgAJPZ28IqiJ808+mnBF4HAADcLRR3fi3oCrUFpr+v/ktOldBd9oFeqIDe02TWrmL8EVcz+u6zuFo1OVseLjSZXS/D6Kb5s5lPr3r+swGgVmeF/d6P4vwBAABS9rSwd+dkucsyFpXmEUJPZi86rLRdBdBCzG2FbbnncTCM2ZfmOFZmvWgms/b9ex8rpC0mAEAXQvVFCT3oNrWh+st0Xg4AANyqtGKQJv5O75osDiYMD0Nd9YEWQO+iDZ8nsw+xDcqrxB5K289FeG3tYZVOvweALpQ48T2OC+oAAJCmMotBmo0z4zIIoUPQ2FXA+FIAvYUfw+fzxF/tUQzIhdEAcLhHhV7DUg5aBACgTKXOV7//XmmH0G2oGCpeu/CsmU8vOvpZZWoD3HAYUQ7h802bYXRurx0AUlHq5Pe3BF4DAADcpdRikKNY5Z1wCN1tG443AugHhAMHvxVwGv7Rsnp+Mvu8+pADAFuYzEquFjYnAAAgZSXPxZdtRtIMoUNLhY8d/bSLZj593dHPKk+ofv4Yr3dJrSzawfs1VtMDAA8rOagVQgMAkKZwfknJ7WWTroR+0VEz7qtmPn3Wwc8pU6h4+lroIUQrr2JVtF7RAHC/Xwq+PuYBAACkqvRDtJet8dILobtrw9EeQPi4g59TpsmsDfo/V/BBb2JV9DftOQDgXmXfJ8tuNwIAQL5Kn6cuC0JSrIT+0MHPWMSDCBcd/KzyTGbtNX5b2W99FNtzOLQQAG5Xw8I0AACk5r+FvyMJtuMI/Xu7qMJ50synVx38nLKE/s9t9XPNQewHfaIB4Falh9BacgAAkKLSd+4nVgkdmnB30YajrYC+7ODnlCX0RP5cQYn/Nl7FanAAoPk+TyidtlwAADCSlCqhuwgFL5r59KKDn1OWdQDt4WvtXBANAN+ZIwAAwDiqKBhNI4QOfXoPveBXzXz6rKNXVBoB9O3OteYAAAAAgB5NZkfjh9ChSvfQQ/LaAwgfd/SKyhKqfQXQd3vlsEIAAAAA6M1JCpXQrzo4KOZxM58uOno95ZjM3lZ+COG22sMK9coGAAAAgB6MG0JPZm2F7osDf8rLZj696ugVlWMyO+vg2tbkYzwcEwBqZNcUAAAMrY4DwpfGroQ+tA3Hp2Y+fdfRaylHCFMdurebo2UQDQB1qmbyCwAACammGGS8EPrwwwjb6mcHEd7uo4fJvZzEFiYAAAAAQEfGCaFDqfmrA37CYhlA6wP9s8nstS21B3mhPzQAAAAAdGesSui2V/Eh/Xff6AN9i9CG45Bwn0ArEwAAAADoyPAhdAhKnx/wE/SBvpvwtBvHsaIcAAAAADjQGJXQrw7oV3ytD/QdJrOzA3ts86PnccEEAAAAADjAsCF06LV7fsBP0Af6bg7U69ahfcsBAAAAoHrNCJXQh4R6bR/oyw5fSzkms/MDe2xzu3PV0AAAAABwmOFC6FAFvW+7iKtmPtWj924qdvvj2gIAAADAAYashD6kXYQ+0HdRBd031dAAAAAAcIBhQugQlJ7s+W+3bTiuOn5FJXle+wUYwCF9zAEAAACgakNVQu/b0uBaG457TGYnB4T7bE/QDwAAAAB76j+EPqxdhDYc93ua8osryFEzmZ3VfhEAAAAAYB9DVELvWwX9rplPLzt+LaXRJmI4f9TyiwIAAABAl/oNofevgl4se0Fz37U9W1boMhSBPwAAAADsoe9K6H2roF828+mi49dSmke1X4DBackBAAAAADvrL4Tevwr6splPL3p4RaURiA5PSw4AAAAA2FGfldD7VkE7jPAhk9nxAYc9sr9T1w4AAAAAdtNPCL1/FfSbZj697uEVlUYYOo7jZjLThxsAAAAAdtBXJfTzPf6dtgf0ux5eS4l+q/0CjMgCAAAAAADsoPsQejJrQ7qTPf5NhxFub5/ri2sPAAAAAIProxJ6n17QDiPcjWrc8ahCBwAAAIAddBtCT2Ynewakb7xpW9KTeGyuPwAAAADsoOtK6H16QV808+llx6+jZNpBjEsVOgAAAADsoLsQejI7bprmfI9/UxU0AAAAAEChuqyE3qcK+k0zn177cO1EJe7YQtsZAAAAAGAL3YTQoU/xrlXQi6Zp3nmTyJC+0AAAAACwpa4qoc/2CObaKuiFNwoAAAAAoFxdhdCvdvznr5v5VBU0AAAAAEDhDg+hJ7O2R/Hxjv+WwwgBAAAAACrQRSX00x3/+bYK+sKHCwAAAACgfIeF0JPZ8R4HEqqCBgAAAACoxKGV0LsG0JeqoAEAAAAA6nFoCL1rKw5V0Idb5P4LFOC69gsAAAAAANvaP4SezM52PJCwrYK+9M4c7Crz15+/+VQIDQAAAABbOqQS+o8d/3lV0AAAAAAAldkvhJ7MjnbsB60Kuiuu49hcfwAAAADYwb6V0LseSKgKulv6Qo9HKw4AAAAA2MG+IfQuBxJeq97tnL7Q4/mn1l8cAAAAAPaxewg9mZ00TXOyw7+hCrp7X0r7hTJiQQUAAAAAdrBPJfSuVdAX3pDOqYQej2sPAAAAADvYJ4Q+2+GfVQXdD9W447hq5lP9uAEAAABgB7uF0JNZG0Afb/lPq4LuSwhCVeQOT/gPAAAAADvatRL6jx3+2T+9Gb36q+DfLVU+0wAAAACwo11D6G1bcbSVuu+8Gb36VPDvlqJFM5+qPgcAAACAHW0fQodWHEdb/tMXeuf2LASi10X/jmkR+gMAAADAHnaphN6lFcd7b8YgtIcYjs80AAAAAOxhlxB621YcbRW0Ct1hOPhxGNdacQAAAADAfrYLoXdrxaE6dygh7Ncmon9vSv8FAQAAAKAv21ZCb9uK46qZTy+9W4PSJqJfC0E/AAAAAOxv2xB621YcAtGhhdBf8N+f9w7ZBAAAAID9PRxCb9+KY9HMp3oUj0O7iH604fO7En8xAAAAABjKf7b4cx5t+VpUQY+lrYaezNpq6NM6L0Bvyq2CnsxO4uLScfzrNqHCXoud4Uxm7XtysvHn3fzvD7mKiydNXBh0oCblm8zuu/ddOywZKrL+Prh5//zlnvnOzbnQIt5P79J+p/yz8b+t773mTHC49XNKE8fxZkHcttnEfdrx+vfG/7455s0bYBc/jtebPI/yk21C6G1bcaiCHtcbIXSnrouqgg47Gh7Fidy2n5NX8d9t4sSs/euvZTitRcl+JrPVg+7qZr2aSN938z7kz1v9p6uNCfb/4gKDSTbpWY+RzVBo84Fz9/vcehxs2lywWY2L9UOoIAnSFB52V/fR/27cP3dZsH3I0d5z6vvvux7GofkhtFqNs9V9fshn2bszjjCON4PpLxv/3fyZcq0Lojbvq7/dsyj0sIfn4ZsLu5ff/3d5Q7H+de8vFm4QX7f45T818+mT2i/m6CazD03TnFd+FbrypJlP8z6QMIzf53GS1XXA2S46/SmouUe4/ifxxn3SW9B8uMs4Efg7LjCYWNO/EDZvjpHjjkOkLiw2FuD+Kf7w5cns9ffFx3K9aebT14X/jmXI4ztiX1fxofvv7/dgD9uUaL2wfFrgOL7cGMdlzw8ozzps3rzHpljQeLkRUpd9vww7uT4n8Er69vihEPpF0zRvt3gRj33xJiB8mXxLNOjKSRvEPc721YcvsFcD3Ugu40O98R9C59NYzXGa8ThcxPf1L6E0nQnfS6uH0JzHR7MRTH+Jk+EyKhuF0Ixl/TB8urFrq7a57HW8964WhFVMk5+y7vX7uLoxjs2hScP6OXU1Nu9qT5WD6xvz8DJyCCF0NJl93iLIarek/NrxC2Nfoe3CR9dvb20A93uWk4bwEPdhhxY6XWqrxl9WNdkK13vV5qSPavNUXMf3908PxWxtPdn9o4JWUavw6EvcGZZnhYYQmqGE++fmom0plZFdWtz4XhFmkRbjeBtlzA/IT9iFsDkPL31B6FMcZ/ku4gqho8ns/9vih7TBUzm9c0swmX0cKYgswbNmPs2vv3n40vo48g1mEb8Pyu0Pvw6e/6h0jAmkuVtYBP2jgAqLQ10tx0huwZEQmj6FhamzjcCK3azuv3/ZfcZo6lpg7sPqfJ1P5tF0LozPpxaFMn1eFULvdBH+n1W9xISg7GvlIcA+Lpr59Fl2r3r7tjlDyfM63ieEa08t7vygvcG/j++3e0Ct1sFzybsBDrEKpNMfJ0JoumZhqi+LjUA67/NLSN/6cPMz47hTCjs4XKh4fm583imfcSaEXl6ENtR68cAPKC9sKkVYCfssFNjaVextnleYlu5hlHlez03rm/q5cfQgB1XWxIR3X6tJcJqhkRCaLliYGtpi4x4syKIbIQx5ahwPZlXYofUOD1vvzH2uDc5OrjbGWXoZhRB6eRG+bvGhfmIFPmGT2XnsEcz98uwDnW4AvZJrsH+6EbCxm8v4IFxuS5aahXDpuS24B0tzF4EQmn2ttwBbtB1X2g/YpM0CcyrSXrBmPGGMvrI4dLDVbqI3SeU/1YfQYXXl/x74lx1ImIM6HioPsYhBaV7VI/ksMLSHAzxO4HU8LFzTpwK2TlzHG7swOnfraotXHko7t4iB0bskAiMhNLsK902VWOlJ8wGbNJn/puo6tvNKY47AeEI4+coY7cVFMvdKIfSy2unjA/+yiXwu0q+YHVN+BxFuNz5T0k6eXib76sIX/lsP0b24jodVqubITQifX8SASbVFv9IIo4XQbCNUYp37bsjGZfzca5fF2voe/9QCcxbSCcoYjgWiIY0/xoTQWz2I/OqLMCOC6NvkGEC3k8ZvGT74pde6J2wffuvGPggPwbkQPo9p3DBaCM191tuAzSXz5D6M7fz5E0bXQIHUmMYbYxWF0P++43949MC/eOnLLzPhAElb49fyC6CDD5lOGj/EcGt87esIB69+FUAPJtxU28WwVD4H/CxUXHyND6jep+EdxWv/Nb4XML72oWgy+xgXwH0u87W6D3+OD7rUpA2fQ0HSN73bs3a+fA/DfFoFe2nC/fZzDCIF0OM4j/Pw155Z+3NXCP3Q5OTPXH5BNoQg+l3ll2QRq3LzC6DDQ0Ouh+UdxRXdcYVg51us9GR4q8mzICMlYdL7NS5yeagZ33FcuPscd2zA8NrP3vph2EG95RBG1+Tn8JkyCKNLsh6nnxVIJWGzKMT8pwc/t+N4uAx8EVtxaJCfq3wOtetanocQroSHwdxvTI9H2QoaJmgf3NiTchl3JNhVM5awwv/Wg2ny3sWtgf3Ou7TjoNF2o0K295fIOK5JWoccs5vJ7IUdiMkb5pm18nYcD4U0n3zBZS5UAf8eb1q1uIqLJ7kG0KeFBKjDBxzh5q71RnpOrTCPKIwLlVF5eGGs0Lt1qyrfC3VZbz0mf2Ecv47zXuO4Dlp55SjsNvoai0EE0Gk7dZ/s1m0h9G8P/Al/pf5LsYUQxv4aV3ZK164M/5754snzBF5DF04H214eJuIf3dyT1r4vH2PwwRDClr/PxkV2juNY+ahHHZ1bL0ppVVWnEGJNZt+06MjYuuWcqso6bbby0qIjZeuFIi3X8rG6T37VKu9wu1ZCXzfz6adUfxl21Iay8+njpmleFloVfR3bP7xM4LXsLwQOJVXA9R+oh4eob/pYZuNFvKl7aOrT+uBBIUO+zmIfSN9tHE4lFj86dohwhtb923M9vJxuncZ5gqrN1KzvuaW3PivZiarow/0YQodVs/tuXgLoEs2n72J7jpKqosPvNEb/4e6VFjac9fpwE24Kn03Es3MSJ81Wl7u23hXgAbUM6x0EgiL2sW69oRKL25xb7MrAj603LC5zk90NKQk7jj675xbjlV0H+7tZCf3QoPgztV+AjrSN1kNV9LNYQZyryxg+vyyod/kfCbyGLvVT2R0m45+tLmftKFZh6WnXlRDqf7UroEgv4njxQMP2QiDxVesNHnCkBVDC1uPYnJf7rHY3aHs3Fu0hS+Z8oz3tEkJfZ3uoG9trDy2cT39dnpSdV4uOy9h643GBn9MSv9gedfrT1kGb1f78HcWedoLoQ4Vr+Dk+hFCmEws3bGVd/ew7gV2cxYds86sUGMfs54VetiMI1/uzQpCiOd9oDzdD6PuCofdJvXL6NZ++jgcXpl4ZvRk+l3fIYrmT/u5uxmH10WS8PILoQ7Q9PbXfqMVq4eZD7ReCO6wfhFU/s49VNaUemGMyjjnMqpetz88Q1s+ngv86ON9oB7tUQusHXZtwcOGqMvpJQp+BtkL7IrbdKDN8Xis1hD7qZDU+hJQfBW3FEkTvat2WxnWrz3mcAFuQYy0EDno/04VXvmNGYhzTnbfa7PQsLNh5Pq3P6nwjO4cesA6h7z+U8GrZM5h6zaefmvm0DaL/X6yOHjqQXgXPT5r59P818+mzStrD/JbAa+jLYRPpdaUnZRNEbys8UHzWlqZqq0onQUXtfuxDCV050Z5jQMYx/TgzV+hJeD7Vq71ezjfawmYl9H1fQg4kJFhXR68C6fbv72JbjC4t4s98EyueV8FzbRX5JVeb7B+whxu8L/d6CKIfEh4kvqmSIk6AvxozFdOHkn6tHrJt6++TcUy/joVlHbITkR9pk3eP/2z8T1pxsJs2kA6fjfXnI0yYjjc+T9scQNf+nL/j36/iIZgq74OSA6Xdf7dQ6fnBhLxK7c38ygG5t1g/qNr2x6YPy11u4YwHahH6UOoHzxDabf2/LYtE6FYIBt8ax/RsdaZEO45futh7Wu9EVAjCpvPYbeJJzM2INkPou8JCrTjYXgiIrixcdKD8nnu7/X5u8ISKjd/dkzYIoLlf28P1FyFRJUJlqm37DOk83ocee8juSOgnazs/Q3oRnzufGcc78nzK/U7j86t75IbNdhx3BUJaccA4hNArbvAER8uDPhymEgig2c75couocVO2sO1TAM0YTuJDtjnaofSTZTxncRybK2zL8ynbcV7LDduE0CpagfG4wfOjE0GLAJqdnXq4LFToQ+mcBMYmiD5EGMdfjWNGZhxvy/Mpuzk2ttZCCH33CcdaccB4yv+Seuh0dTd4bnde9UEqAmj2cyKILsz6Him4IgVHHrL3YK5LWgTRDzFm2Y97ZLSqhNaKA9IjKGhbL7jBc7u3Vd7EBdAcxsNlKTwEk6bVQ7YDpLexvqcbx6REWHYX914OU/09stkihNaKAxhH2F58f6U0NQsnetckHBojgOZQgujceQgmbavzG1To30cATdoE0Te599KN6u+RqxD6t1v+t2utOIBR6G/Jdk7iKfLlCxPfj6nB0IYAACAASURBVAJoOuLhMlcegsnHB0H0HexqIg/mCj96695Lh6q9R65C6NtugKqggeGFUNFDC9t6HiuESyd0omseLnMjgCY/dbbOuo9dTeTFXKFZjtu3nk/pQZVB9CqEvm3Lu37QwLDCl/ArV50dlN+WI+wM8BBPH1ZbAoUhqRNAkycB1ia7msjTahzXUPTxs/B8+iK1l0Ux2iC6qhak/77jwaNtxXE1wusBahUeUOrq8UtXTos94GEye6Hygp6tqvL+60InzTZgciWIbiwkkb06F609nzKMjzXdG/59xy+rFQcwnHVvPNjX2+KuXBgX5f1epOhElU/CnJNA/o5itVfNFcAWkshdXc9r64Uj6NtRTc98/75jO9CXEV4LUKNwg/9gayIHOo5Vw2Uw8QWa79uABdCUoN6CA+edUI6TuDBaA61zoAe3VUIvmvlUJTQwFP1u6cqrgqqsTHyhdqFHoG3AlKSmACtw3gnlOS+q8OM2YeGoqj69MJR/3/LnXLr6wEDaSXmZvXwZw1ERLQXCxN7EF2oWDoD66DNAgcoPsFa01aJcb4s9TC38XhaOoCdtCP3LjR+tFQcwFEEbXXuedTW0B1YgfIfZDUHJ3hZ/UKFxTPk+xgXTcqzbRAI9+U88FX2TVhwA5OooVi+8zPT1m/gCDjDr1vXGX//En7z6/93m6Mb1fxT/buG8W5+byezXZj5dlPRLbfhwy3M2+zOO07NaaPm9oN/JuIWe/efGj79u5tO7vsgBIAcvmsnsfXb3s9B/TvAENXMQ4aGuYmvBv5f/eT692vPn3V6UE6rkTuJfv8VAS2Cxn1WA9TjHF3+v0G5Eu7n9Gcf5aPu8v23m01yLP9YmszPjFvp3M4RWBQ1ACdoQ53U2v0fYlqz/HNRMO559LOLzy1/L0Krvqtrw8y9/OEMnbEdvQ6w/4t+1X9je6TKwnU/f5fKCH2Qc78M4zltb/PFXM5/me7aYNhwwmJshtH7QAJSg7Q39LqNtvia+47qKD8F3sX2XIXwQfGztYhlYzafjF9CEXTcX8a9VNd1TFXVba/tDXx5Q7Zoa9/PtGcfl+Jh5e51X7r+juq+1ThN3KtitUIjNEHqRxA0AAA53FKuh06+uCtt2teHo1yIGzV9+6Cu5a8uW9Rbe1WT4UfzvHlw4jHY822jH65/L7/WUg47wPPUpfl+8iEGWh+f7fSiir2zblsA4fohxXKZVJfGT7H67yew0vsf06zLOxf/5Xvyxz+JjeL+ONtrpnBibeflXM5l9jhU+74ro5QPbCBOK86S3/4UHUtvz03a5cUDK5gru7eFW2Oq3eZNcVVc+uuUAFQ7Xvg+/Jn0dw3fRNyFm51Zbe7/Erb399gcP269P41hWNZWuN818ml6bnvBA9TmBV5Kq6/jeXWT7G4Re3688KN8rzfG5LeP4IcZxHZ5kV9g4mX31DNaLy415eL+tWtbtdFbzcM9V6Xq8GUL/6lBCirdezX4eD7pI9zAUIXRqFjdupv1sGw0PMSfxJqon3eEeJ92jbjL74BCyzqx7So75ABTuM2exr6RAOi2phtDfhBq3WsT3rKR+wUKs++X5PBq+9796X2/VjuP3WS8w3GQc3+d6uashl7Yc4b3UQqc7q97un0b9DITikKfxGcuzdFoe/yfeGN4JoCmeCQO7u94ItYYJMsOfc/m9jUToSfeHVd29Pf3h4JmUhAUHAfThLpdbe1OprgqT7tBXcrXrJix8uvfws7Dg7LPxs3YMvcy4v+jt2u+pyexTLIhQaPCzD8vF4/y8MI5v1X7WnxnHVTmO1yT9HfZhjuYQ0cOtWuxcJJMphmKxq+XnMGRAT53vko5/xdL1RXE3B1i5O3y+VAnNHdI5KGVT+Cw/t2VsJ4tYWZXePW69E4n9XMTwOY/T2I3fFKRVCR0qdb4m8EpSch1DqzzG9SHC+//Bd8JP8trObxzfZhHfxxrG8XEcx+ZzP/o9+cNGPWsfKq8WO+G7+rkCoNE9/lflF4CSPVz5LIRmU9gumNIq7l1CBe0rE96tPUtugqR35CEuY4Vk2g83dwm7G96qmhtFaiG0hagflVk1+RDzvZty285vHP/IOKbJ4Dn7OC4e2WW6u7z7u4f3/pUwejSP/13pL06p2m017SRgMvu/uCrtIZ+HhJ6ToVr2dRatidrKkjCxexZfP/d7lOD10X9ud9exx/fjbAPoJp64Hw7MNH5rFhbKBVdr7cLSkyp3ZoaFkce+D747jm0O0mcc31T7OP7dOP7uNC66p+qVAHpnq3Mafs36gNH2WX8+fRbHa/m7NRIkhKYM7faKcMDX/7mpsIN3G+FzfpPGMAH4NVadcLe0JsHhodUC2W7exMq4ciaL6/Gb70Se/ehDuWkRF5fKOXxwH+G77dfYw5J2y3QYJ+kKr0/la2AcN9/70BrHa2ne50IlrCrY3VzGeXg5B4y241VR1yiE0OQrVD2fN5PZ17idxs2EbV3G8Dn/Q4/a199WneRwAMh4jmL7i1R4aN3e9fdJb4mVVWH8PotVkA6IrscLi+VLq90NKpGa74eaPrYwtZTDQo3DCIOFcbzBON50HAsvUmMevr1F3OHwOIvdwvtQ1DU4ITT5abf2TGYfY9WzA13YRbk30lB9YiX3bmmE0Kqgd3GRxcE2XQgP7797aK3Auhdh7a6qGd+7WC9M+S5oi0vCeElPeF3Pk3xtw7qKRR3G8SbjeFNa9ztV0Lu4qmaHw7qo64ln6f4JoUlfqHg+W7bbCL2ePya3vZ4crLYRlXsjDSu5+kreLpW+0E8TeA2pW8RDjeo62Gj90GoCXDYB9PrB1uf8LgKslVTHi9Z/xvHDjOMmwWpoi0fbaQ/qr2+huD23JRSFWFjrkRCaNLWrlJPZi42K549x1bL2CR/7eVP0NqJNYbKgNcfPxq+EDi1BHGB0v9W23nof2sIE+LEJcIFUYDWCqx0IsJokq6GN48Y43oFx3CSzmBT6uNc+drfxLH5u6xQOLrQ7sUdCaNIQQufzWO38rWmab7EXnIpnDrFYVhWWdIjCNkKAJ4i+afy+0Kov7mdb70q4Bo/1pytO7VXQq10OgqttCbCaBMeNcWwc78Y4TqUa2nkM91s9N9d+zwnCuK03jO+REJrhhcD5tJnMXi8rnUOLjW+xv7N+qXRldeBRnSFOaDsiwPrReP3jQ+WURbW7qaq6ad2fzsNACVRPNnGMW2Ta3cvKd0akUw1tHC+M473VPo5TWLzREu9ui6qfm+8SAnlnLnXsP0X9NqQlVB0exeDnlxgun1iBZAACreBZbP9gzAW/jfhnq4K+m/F6n7YSYzJrBJjZq7168pngak/td+Nk9jgWbNR6P2+//1LY1Vb7OH5pHO/JOA7V0GNV2ToY/D4Wl+7TfmYns/bafPZM3Q0hdI1COPwhVoqufLnnSlzGv98VIP+y8aV+7AuekQm0VsKE92Uc74z73SRAvJ3xuo0QRP8jAMmU6skL23sPtA6wvmb9e+zveTOZvRv1XmEcvzOODxTG8ZMYZtXo+Yi7u1RB304AvY32+oR7sCC6A0Loet0Mi+/rleqhl1wItG4Kq7evLA4tjdMTOlRfmLD8zHjdRdvbfjL7xYJGlmqeRzkstyvhIfhlPDOlNkexpdWYIWjd43g+NY67MJ9eNpPZm0o/TyfLYrj2GgwpLCA5GPxnAuhdCKI7oyc0UAqB1t3epPrCBjdOX0nVFz8zXvfhcKP8qJ50gFmXwnkPwwY46RgvtJvMjio+1yEcVkZ3woHptQZ/Y7Sn0xLvdtpk7SpcLwtyBxJCAyW4FmjdI2yfvN773y/LsCG06ovbOFn/ECGIdnBMPmoOoN94wO1FrYckHceWgmN4UXHlWzuOzSG796y0X2hLZyMUhDgY/GcvHUK4p/VhhexJCA3kLlRoCLQeoho6GHriq3XCz1ReHO5Z5afs56TWCqyrWO1H10Ig+L7S6zrWzqJadzRdxup7uhbmQbXOzYebG09mZ1oS/uTCuD5QCKLtTNyTEBrInUBrG+FmKagffiKqFceP3qi86EBYdHtiTCeu7n7wtqv2KQT8NVannsfWGMMJ47jWEEu1X7/eVTqOh5wb/zHgn5UD7SS6EnYm1toe6yBCaCBnAq3dWLFtml8G+5MmsxPVFz+4VBnZoVANqU9n2mpdhLoY/OCpOtUaEA69w6jWcawNR9/CgnKN1dDHsUJ5CFpxrGmH1z0FIXsQQgO5Emjtrtbtu5uGDIVVQa8tVFT1IAR9Wu2kqO5+8D6TQwjjv8awf7h7a73jeBGrdOlb2KlY447O/iuUQ9Bd626k2zinoWvrnYnsQAgN5EigtY9Q0WLyMRzVF2sqqvpS9yn7Kau1F/Q7Y31QNQb+JwMebFbrOH6jWnJQNbZHGKK1jlYca/q79yUsCLu2OxBCAzkSaO3vz1xfeEeGqWjSimOTiW//LMqlp8ZDSWvdWj6eequhbeXvz7V79sDCOK7xuabv8aUYJFC81bf59KWCkO0JoYHcCLQOo4f2MEx810x8+1b3KfvpqXcL8CfVk6Oocez335IjjOMaF5PdS8ZR43Xvr1JZK45N7xVvDcLzzpaE0EBufMEfQkuOodgCGNi1MBRtOVJS6/gXXo2hzirKIVpy1DiOF4oVRhJ6Q9c2js96bMnxqKefm5trZygNJBSEKJTbghAayIlAqxt/lfBL7G0y67clR5hQn/T6Z+Th2mRscDX2lUxLGP81tuK4cH8eVY0LALbyd++93QyjqrFlXl9zcjsSA/PCYb2Ji3ncQwgN5MJJ3d2psX/kkEx8AwcbDS1URF7U9Usnp9bxX/t5A2P7VOGDb3+VjvVu5Xf/GFeN17/7HQdhl4RzWUILSzsbhhSeewT/DxBCA7lQndGVEFTRH1sAw/Y/D7PjUIUxrhq38F+5r4wszI9qCxv6XPCpcRzbzTC2cP2N4zR/Zo60yBpDeP4xJ7qHEBrIgSro7tV8c+y7OqLfdh95MPEdS3iIfV/nL5+EOrfwk4L6qtFDxXIfahzHdbdqS0dt4/iomcy6bmGnGCRUQQtCx+M56B5CaCAHqqC796W0X2gH/YXQYSJd+xZAVdDje6caegT9BWKps903BXUeUNh92FRnK45r2/YTEd6H2u7fXRdvKAYRgo4r3I8tAtxBCA2kThV0P9wY+2Hia+I7vrBopzp1eDVu4f9kkTgptQWJfRwCXGMVpQA6LbW9H92NuVAMUmM/902qoNPgeegOQmggdRcecHtxVeDvlILfKv/9VUGnQzX08GqshHYgYVpqa6nQx8KvcczYjOM0flaujOcUqIa+kxAaSJ1qvj6EYF8Q3b3aJ7/GaypUQw+r1uorW/jTEh5661p8msy6u+/W2VKrXTw2H0xLbcFVl32hFYMoBkmJauhbCKGBlF06qbtXtV7bX3r5qZPZsX7QjYlvWrQyGk6N1ZMC6DRpybG/GheSjePUhEVk43g/tReDqIJOiWroWwmhgZS5kfbr75J/uXv0FRT30ZsyJ1rnpCa8HxYGhlFjH9natoznoraDh7sce8YxqTCOdzWZHSkGUXyQIHnGDUJoIGWqM/pl+2W3ag+hTbLS5H0ZhgpKUlFb1VWXoVNtOxoWDjBLlnG8u9rn4YpBUhTao3hfNgihgVRduZH2TquTbtVYQbVy7UE2UeF9Mdb71GVP2ny4R6cqtDGracx3EzzVOY7dt1MV+nTX9B3bxfjTioNU2ZW4QQgNpMrEuG8OoulazRUYKiLT5oDCfgmvSE1d7083AXKN47i2lg+5qWuefvjhhDUfSqgYJG3m4RuE0ECqTIyHoUKyC6EP3VH+v8jeVF+kzSJBv/SRJTW1nfnQxf23xnEstEpbbc9Ch7bkUAxCmsIOJcVfkRAaSJWJ8TCE0N2oeeJ7rao+cSa/fauzHQcpq20O1cU9uLb7+MK9O3nG8W5qPpRQMUj6vEeREBpI0bVek4MRQnej5j50qi/yYPLbB/2gSVF94eIvB/3boQ1AbbuZFHukr7Zx/N+9/80678UrikHy4HkpEkIDKXIjHc4/tfyiPTvsAThvtuXnweS3HzXughBe5aGm98k2/t3V1rIlP2GxzyGj26m5Ctr8Lgd2JX4nhAZSZGI8HNVs3ah18rtwEEomTH77UuNBSO7ReagpvDq0irnGcezenQfjeDs1h9CKQfJR/a7ERggNJEpQMhzXuhu19oT2EJsX71f3ahz77ht5qGmn06Hj0DgmVTUdTnjIOKzxYNFGMUh2qn+vGiE0kCjVueSmtl6SK7Wd3J471TLdqy+80nsyFx52t1dbP1lnr+TD2S3bqXUe7ns+J2H+VP2YFkID6bGiO6Qab4TdTlTrPgzFWM2J79Zu1Tn2fYbyUdf9fTLbbzt+OJSwNtWHIBkxjrdT645ExSD5qX4eJYQGUqMyY0ihT2xtup6o1lp9sVARmaXqJ78dqrEHpfAqF/Xd34VX2xNc5aO2edbu43gyq3Ue3pjTZan6718hNJAaoRa50Q+anFQ/+e1QjSF0TX2GS2BO9TCLSaRL25Rt1DoP1x4rT9U/PwmhgdSYbJGb/1b6jv2dwGtgd9VPfjtU40FIPj95Mad6WI3jWAidF0Hj/fSDJh9hl1LV38FCaCA1gq3heRg5jEpo8qEvdJdUUJI64dXDagywfC7yYjHpfvpBk5uqv4OF0AAIFdiHh9h8ee+6UV8IXec5Ajn7X+0XYAv1BVhaPOTG+8VtzOXyVXXRnRAaSI0bKrmpsQJj4SE2a75nDzWZ1TjuBdD58T19n8msxt0Mvv/zY5fo/WpsqdO4J2et6l2JQmggNR6YyI2tvOTG4XKHq3Hce+DNj+/q+9UYQptnQwkcSpgzPaEBAHZg4ps3faEPd5r7L7AHITSlsaOBHHjP7lfjorB5XM4qb232nwReA8CaQ7PIyWRWYxDVqKTNngda9nHeTGbnrhwFqTG8Mo4pTZ1t8cjdZaUFDSqhAYCdqYTOmcPluvBb/r8CVO+X2i8AkCV9wvNX7VxcCA0A7EqImT+7Tg5TYwUllKbGntBA/szD81ftrlIhNJASN1RyU+MWQJW0IISGEhjHkLN62+KZh+dPJTRAAtxQyU2ND7D60JXhS+0X4EB1LkBBqvY7U8Q4hrRo97Ydz8z5E0IDAGzBAwIAAN2aTxU6bMOOxBIIoQEAqIae0PuazPSRhbTsvjg6mWnFAWkRrFKPihcShNAAwC5UQlM7ITSkZZ/qSa04IC37hHI13o8VEZA1ITSQEj1Kyc2jCt+x/yXwGjicLa9AKcwfIX/7jGOLwuSsysIeITQAQG3mUxXtQCl8n0H+tOOgNlUWhAihAYBdqKCldiqvIC1CaMifNhPb8X1H1oTQAMAuTH6pnRAa0nG95wFPp95DSMa+47hG2uKRNSE0AECdPPABuVM9CfkzjqlRlecZCKEBAOokhAZy95d3ELJnHEMlhNBASmzzBwBgG4tmPv3kSkHWjGOoiBAaSIkDzwAA2MaFqwTZM46hIkJoAAAAcvPeOwbZM46hIkJoAAAAcnLRzKf62kPejOPdOcSRrAmhAQAAyMkb7xZkzziGygihAQAAyMUb1ZOQPeMYKiSEBgAAIAdXTdO8805B1ozj/Z3k+sKhEUIDAACQgUXTNM+a+XThzYJsGceHOcr5xYMQGgAAgNS9bObTK+8SZO2ZcQz1EkIDAACQsja4uvAOQdbacfzJWwj1EkIDAACQooUAGrLXjuPHxjEghAaA/X1x7ciYw22AlF0JriB77Tj+vZlPL3v4RbT1IGe/1Pju/SeB1wAA5MOBKOXwXgIpaqsm3zfz6WvvDmRriHHscENydlzju6cSGgDYhepZatdHNRcQAqV3sWqy7wDaOIZ+tOP4TdM0v1pI6sVvBf5OVEQlNAAAAGO5WlZMNs2nZj5V2Qh5ahd2/tQ+p3d2sZE1ITQA7O/atSNLk5mKdmBMV8vAKgTP7qWQp7HHsUUrclblgoIQGgD2V+ODs22AZVBJAwzpOlZKfln+XfAMOVrEcfxXEuN4Pr1qJrPaPkhV9hEuVJUFIUJoAGAXwktq5zR+eNhlHCt/Jxo6G8fwsNTHcY2E0GRNCA0A+6txMi6ELsNp7Rdgb23P2voqr+A2q8P9vsQKyavlfTGHoMo4hpWrjfH7vziu8xjHwcLclOxMZtUuJgihAWBf7QS9vodYvYShTqtWCtRlcaNq+MrhgVm7dp5Fsdr39Z97frmrjR7Ki2UrizJcVbewPpmdNvPp5Rb/JOkSQgMAbGUyOxJCZE9v78NcVbgg86WZT18n8DqgKzWO4z+NY4DRVVu9/+8EXgMA5KzGvpKqofNn6+phLMJA/oxjyF+N83At1fJX7bOUEBoADlPjQ6wAM38WEg4jvAJy9F/vGoX5X4VvqHGcv2rfQyE0ABymxt6KAsz8WUg4zN85v/g9PcryVcPdauxx7v5NaczDyZFKaABgL/cdAlMq/YRz1h5oAwCQvxpD6GoPtStIte+hEBoADmPyS268f4dzKj3kzziG/JmHkyMhNACwF9sAyY2HF/bhcwP5M44py3xa4zzcrracVf7eCaEB4DAmv+RGb99Dzac1VlAKryiLcQylUBBCTqr+HhZCA8Ahaq3AMPnNmfeuG4sSfgmonHEM+atxLu58lnxV/d4JoQHgcFcVXkOT3xxNZm31xVHtl6Ej9Y17OyAoj3EM+atxHq6gIF9Vv3dCaAA4nG2A5EL40J0aH3otYFCaWnczQUn+qfDdPGkmM/fkPOkJDQAc5O8KL5/Jb55UsHenzodeKEuN49hiJKWpcVG4MZYzZCeKEBoAOmDySy68Z92pcdz/ksBrgC7VeDjhfxN4DdClWufhDprOT/XzcCE0AByu1u28Jr85CZXrKlm7U+NDb9UnulMkvWQhd/PpotK5ePWBZoaqf3YSQgPAoebTWiswzhJ4DWzP+9WlOh96PfBSljCOF5W9q0JoSlTn+Sxa4+Wm+nmUEBoAulHjlt7jZjJTGZmP6qsvelDfAtRkJsCiNLWN4yP3bgr0pdI3VYFBLiaz6t+rRggNAJ2ptSWHCVU+vFfdq/NQUihLjeGVcUxpat2V+EcCr4HtVF8M0gihAaAzNYZRracJvAYeEqpXbdnsXo07IH5L4DVAl2oMr4QhlMYh4aSu+mKQRggNAJ2pMYxqYj8623rTZ7GgHzU+9HrgpTQ13r9VQlOW+fS60l2JR9o8ZCAUg1T/vNQIoQGgI/UeTthY2c+C96gP4VCz2sa+g5Aoi0NGoRRacpAqxSCREBoAulNrNbSJVcpUX/StxnEvwKI09Y3jycw4pjS1Hk54bnE4eYpBIiE0AHSn1snvSQw6SdNz70uvahz3qq4ojXEM+au1GKQRciYstEtRDBIJoQGgOzW35FANnaJQGePBpF8qoSF/xjHkru7WeAoO0mXBb8N/knklAJC/misw2q2Ab2JvTdJxtjy0hv60n/nJ7Kqyg76Ol7sf6n7g5z7hwNq7Kr+ukrtXtIeaTWbXlVWrhYOFw4Fu8LOwkH37vW0+TXXO+6nSxfcT9+UEhXvhee2XYZMQGgC6UmcYtbKquL1I4+UQqYwZxmWF4/5p5bs/WAkP2W1V7aM4Dh4eC5NZE8fNVWyFcZlAMH1ZYVjQ3rffJfA6GNt659R24ziM4cXGGG4Xlz4l8Jt8qXgHWDvne5bA62BNAH2DdhwA0K2aq6FfJfAaWAmHTunVPYy/avglb9DmpXbtd8xk9rlpmm9N03yID9u7fOe031Evmqb52DTN/zWT2YeRD8urcRxrpVW7MI7DGNx9HB/FcfxqOY4ns9U4HnNHQe27EvUeTkVY2FEMcoMQGgC6VevhhE3com/FPx0WBYYStiXX1ormeOTAkLG0W75D+Py5477C58uf2f7scQ67rTG8OhFaVerHcdzVouJRHMfflsH2GJ+t0I6i5tZwQs90nGuJ9zMhNAB0KY2tiGMSfKYghIMCwmHVGGCpoqxNWGj82vP3y+nyz5jM3g56dUM7kBrHscXj2gwzjs9iGP16hKtb81z8PFbgMj4LArcQQgNA92reCqgaOg0WA4ZXZ0sOD7v1CGHShwF/3xfNZPZ14M+YlhyULSzuDDmOX8Wq6CHHcc27Eo9imyPGFO6XdpncQggNAN2r8SF2kwB0TKqgx1Jj5dWRKspKtH1ex/luP4nVlEO156hxHGutU4swjscIKM9iq52hgmi7ErXZGY9e0PcSQgNA92qf/KqGHpdFgDGErfw1jn0PWqULwdWY3+lHy8rNIQKs+fS6aZqr3v+c9BjHJWvHTjh8cMxxfDJYEF1va51N5oLjeaEX9N2E0ADQtfAQe135dX1rm/4IQvivom08Ne6CsOhUqhBcfU2k2v1kwBYCfw7056TkTOVkocJcrMvDBw9xspwfDqP2XYnndjiMIHyPWgC4hxAaAPpRezX0kUnYwMKD5rAHeXFTreNeT9nSrIOrodpgbKMNSocI0modx+7ZpQmBWGrj+Nw4How54fBc8wcIoQGgHzVWUt30YsA+noQAQfX5mMIW4IsKf/NTFVcFCd/bqQVXK/0/4IfdTDVu5T9XDV2QMI6/Vj6Oa2yts+mkmcwcUjiUsLiSwo6DpAmhAaAP8+mVlhxLQ57AXq8QAHrQSEOtW4BVUZYg7QC6GbD9S60LycZxCdbjONWFaeN4OA4pHILdiFsTQgNAf2wFDFUYrxN4HeUKE19hfyrm00+VLkCd6g2dubCYlXJwtfLHAH9GO44XA/w5qVENnbvwPfzVOF4yD18d7ErfXi0XV3iQEBoA+vPetV16pS1Hr0x806OKkryE4CqHALqJvaH7fZ2htU6tAZZqvlyFcZxL4DjEOL4WRC+dasvRo9CGw/XdkhAaAPqiH92mj70/bNTIxDdVNfaFbuIWazsfchPCidwq5YZY2Kx1IflMj/cMTWZvMxzHQ3zOam2RddNbBSE9CDtHVJrvQAgNAP1SDR2YpHXNxDddbPge7gAAFoJJREFUdVdfPbedPyOT2YdMK1/7D6/C2Q61LiR/sHCckTCOc1yQHiIUrbW1zm0UhHTvo0PBdyOEBoB+mfyunamS7Eh4iDDxTVutC1D6T+ag/Q6ZzD4uewDn6ZeBXnWt4/hYe50MhHH8OeNx/Fvvf0LdrXVuOo5zR7oQFn9Ul+9ICA0AfTL5vemVw8s6YeKbuvn0stIDChv9JxMXFrE+LxcG8zVMtf18elHxQvILbTkSth7HOb9HQy2k25W4dhrDUw4RnmU8z+xBCA0A/TP5/ZG+dIcIDw85h0c1eVPx7/5KW44Ehe/erxaxdlLzPVxbjhSFcfzNON5S3a11bnNuofgAeR0AmhwhNAD0zeT3plC9I4jeXWhnovIiF6GKstZq6CPbfhMTqlo/D1ZFXI53FVdDH2faM7xc63FscWA3CkJ+9NbOxD2EZxffiQcQQgPAMEx+fySI3lV4WNCjMz9/Vvy7nzSTmYe1FITvD8HVPrTVOhdWJcI4PoQzWn72wdjeQXhmMf4OJIQGgCHU3VfyLoLobYUKaFv/8lRzFWUT+8p6yB1TWAjw/XGYmlvrNDGscq8eU2jFZRzvKywmXeT54nsliN6GALozQmgAGI5q6J+tgmiHH90lPHiqgM5VePCtfezrAz+GtpfvZPZ5uRBQnmEXdubTawHW8l4tgBnaehyXGBQOvUBb+734Lh9isQO3mczOBNDdEUIDwHBqr4i8yyqIVomxKTx4ftQDugjvKu4N3WyMcb2Ih7I+uKzUBb6/R/gza6+GPhJEDyws0BvHXbGYdJ9XseiBTeHZ5KMAujtCaAAYiq2AD/mgf2y03vZ3lsTr4TBh7Auw2gc5AVb/JrO28vlr4Q/Nwx/2GwKs2sfxiSB6IGEcl159Ocah3TWf0/CQtv/7V+M70gKnF0JoABiWrYD3exEnwPVWTK63/WlfUJLQF77mauhGgNWz9e6JGhbzLkf6c+1oCuPYgnFf1u03jOM+zKeXI35/5CDsoqm5TV77DNI+i9iJ2AshNAAMyVbAbZwsq/hCFVA91gGSbX/leln7BRBE9yTsnvhaye6Jq7i7YHh6vK+c27rfg/Lbb2wabxzb0fCQVeud+vpEh0KQrwpB+iOEBoDhmfw+7CgeZlZHH9kw6f2m/Ubh5tNPKrCWBNFdCkFB+9Bcyw6ScbfTz6ev7WpYsnW/S6EdWU2Hn413L1QNva1XcYyXvygSqp8VggxACA0AQwvV0O9c962cxqro10U+6IZJ72eT3qo8q/0CRKsdD6qN9rX+/niV5y+wt08JvAa7GgILSodqvwPD1v+6dn+N35tZQch2VmP8Q5FFIWEX4uuKdhKNTggNAON4o6/k1o5iyPItnlKdvxAefaho2y0rFqE2HceHWw9+u1ofPljb98dVHEPjsqth06qHrAWlXa3Dr9quXTuOxziUcE019K7OiysKCc8UX+MzhoW0gQihAWAM+kru42h5SvVklm8Y/WP47MCTer2xnf+7o+VOgBp7T+5jXf38ttKH5pTum88sJn+36iHrvraNdfVzbbsYVlIZx3Y07GazKCTfMLr9nmqfJdpninraWCVDCA0A43kniNrLcQyj/y9OgtOfQLb99ITPrIRFKA+/P3oVe8CrRrpLvdXPK4tmPk3nYN9QkW0xeW21UPzBOL5HvdXPK4tEWuo0sRrbYeG72wyjP2SxCyIs4L5ePjsIn0clhAaAsYQgSk+6/W1Ogj8mt6U/THhfxGqLz8JnfhC286fxIJ6O0zietefYFKoma65+Xkkv8A2HFI7bViA9q237Wk1tCovR3yqufl55H+e/qdAeb39HG+P9a6wwTuceFfo9n8cDB79pu5GG/9R+AQBgVG1V12T2VF/gg50t/5rMVhU2X5Z/H/pBJ1SDtK/lj4qrnNjeszj2PRStrdpzfFpen7TCimGFh/m3FrCWFgn3Un8WK1tZW/V7v1ju+qh7HB/HcWxxLcVx3O5omMzeWxw42EmsMP4Q79+refiwOz7DeDuN83BjLkFCaAAY30sPsJ1ZVWWcx4nwVTx45u/OD8IJAdFJnOz+JkxkZ20wM5k9W4au3HS2HFOT2ZtmPq3rIMfw3dK23njuO+W71Kon19r7Svs5FWLd5jwuEBvHNAmP4/az+VSLhs6cxb/eNpPZ9Y15eLeHQYYdFycb83DvYeKE0AAwtvAA+y4+rNCtkx8qkiezJm6dXsQqjSb+5/vC6eONSe1v8WHyxEMlnWjbchj/dzmKD7HPYzVl2e1LhFZ3SbkKOmjbckxmj+xqutXmOH7WeQiVGuP4LumO47Ag/NKCcC+Of9jNE+bh1/Gvdu79v/i/3Pe9cLQxl/9lY14ucM6QEBoA0vAmTtI8sPRvNZEVFpCKN/HzqIXL7Y5ji47L5bUqLcQK24fPhVZ3epNJO4dVWw7v4e1WLTqM4zqlu5uh+b4gfGluOIhVgLx5re0kqYSDCQEgBWFi/sx7ARVaj3+HI93vNIZY35aHDeUuHFT2wYFJ97rKpo1D6H3qPv6w1Tj+ahxX4zoe4pk692HomRAaAFIRtpqXvd0cuF3oV/7S1dnKcez5/n/NZPY2Hgiah/a1htf8bRnEOXTwIXmNiXAfr6v38f5ObozjfLbWG8e7ymNxJiwkvUnglUCxtOMAgLQ8c8AdVGo+vYh9ZQUa21n1Xn0RDz9qA8A/Oz2A9FChP2z7nf4oHtSkh+X23mXZsmE+fblxWBYP2xzHV8sx3PaHTWkcN98PQPvDON7ZRVbjuN15MZn9oS0H9EMIDQApCYejPHM4ClTr5U8HarKN440gaxED6b8HD7NCNefq/XNQ3f5yr0h8HNszWFDezfq7LywsXcZDhC9jleowwuLRycYCknG8n0WmO3z0d4eeCKEBIDXhcJR3MVABahIWogRYhzm65TT+yxhs/hNP5F/EPqW7B1shaD7eOLH/vxvhmfesG88yOYzwdutx/DXFl5eJ1UF/YSyHxaWr+Nf/4phu9q6yXQfNTQyZjePuPclyHLf3hcns5bJdDNApITQApOlNfChSDckQrnzWErIOsD4LQzpzeyVjCKibjWD6Nse23w/qTZZtOG5qK/DDziZBVjdWrW1WY/nV8v+ux3DzPZi+m4B5OHm201kJ7bFW7Vegb9XMw4XQAJCidVsOIRR9e7lR0UkqQoClEms4Pv9puGrm09fF/DYhyPrNzqbBaJuRhqtlb/T8PYv3BouQ9KltH/Y+PvMV798+SlXKd2sbQE1CH9MSJvGk62J5CA9pagOs8BAMNVjEXsplCWHchU8wlShnHIdWIk8SeCWU66q2eZ4QukapnTQMwN1CCOXhlT60AbSAM3W+A6jH46z7QN8nfNfm32IE7rcobhyH7MRciT5cFX3fu4MQGoDadkcMd7p6V8LDqwVEuiSAzkl4rwTRlOxZBYUyT9zLKdzLIsexxWC6V2UA3QihAWia5u/KLkJ+IXTwOOPXTloE0DkSRFOulzHkKVsIGx4LoinUs6LHsYIQulNtAN0Ioancl9ovQILc2OEu6750+vpzCAF0zgTRlKeuvvSCaMr0roqFJGOXw5XXsmZHQuh66UlGeir+Moat6EvHYQTQJRBEU446v5ME0ZTlIh6+Wb4wdp8pCGFP1QfQzXx6KYSmZqlvazcxBX42n34SRLOHh8IerV5yIogmf3UvigmiKUN94zgUhDwWRLOj6xhAV/+dL4SuV/Uf/gweuN3YGEpt4VP+v2/Y8vgmgVdCHrZ5SBRC50YQTb7symgE0WSv3nEcgsQ6qr/pQvt5+f3eAHo+raZTgRC6Xv+r/QJ44E6OFjHjqW0s/JPAazjcfPpaAMUWhD1r5X3XCaLJj++kTesg+lM6LwoeZByHghDfZTyk6kMIbyOErpfAbz5N+2G0otUwRlfbTbGc31cAxf12eUis4XugzAW38B57ECYHL6sPrm7ThhPz6RP3czLxzDiOBNHcTwD9o+U8XAhdr9q3feUS8Nb0hfUlgddQp/p6U5X1+wqiud27nR4S9ajL2/pB2IMOqWqDq3fenXuE72yttkjZs3i/YUUQze32CaBLL0IUQlctDIaa21Hk8rBdUyjgwXlcNX0f2JJP6Z7teVJ96d/DZd9Tw4Oww5JIzSL2wnSP2kZotWVBidQYx/cRRPOjdifi7yqgf7K8HkLoutVc9fR3Aq9hGzW9R6rwxlXL9V8k34pnX4JogkOqlEoPact/GAgV7b+6p5KIVSWYz+Mu1gtKzq8hBcbxNgTRBIf0Sy99Z/gygxNC1+2vin/7XLY65BKWH04P7LHV8lkrPWTTG7ZeXVQplTw+6rnHhP6yvy9bssB4PgmuDhCu2+/O8WFkxvEuwhzsiZ0M1Tq0X3rpC4/L7xEhdN1qndRcZVQJWct7ZGIzvlo+a+X3HleJUaOuqpRKXoyqr6IwtGTxMMwYXi4P2rMV+TBhQemxPtGM5I1xvIf59JPWWNVZLOdbh7erKf15XAhdvRDE1hj+5TO4w3tUw4OzKo+x1VOJXsfvGSZBv5sAV+GywyqlksdHPTuLNoWH4d8t9jKQ67gjQxV+l0KfaO05GMoiziteu+J7Wu9kcO8t33UcL58O/k1D9lPqs9v3lphCaP6s8Ark9jvXEJrV3BomJYffPNO2qKrtS5gAPzYBLtq7ZZVcV1VKZS981rvY2b6voT2Hakr69CkG0O45fQjzl98rmKsxrk/LcwW0STxcmFM9VmxVtMse7nulfsd/HwdCaGqbyFxnODkuPaCtKxhMW+mftfoe3NZBtIfWsixi37mXPfxWJX5WFoKx79WUKrPo2mobsm37fQvtOZ5os0MPFtro9GDdUsfukPK86bQQZK3U1pHfcwYhdO3CCl1NAeD7BF7DbsLWjpInA8KxdJT+XtRZcb9+aFUFWYZV/+dD+87dpcTJr/vMShvGq4qmOxexatIYG1K43r/6bqMjq+pnQWlfnNFQktXCa1/talRCU4VaHkQWcbKco1xf9zZqbAmTprCSW+pnbVH9Q/K6p6QJcL4uej+lPoyT0lpyaPl007oq2k4k9rHqgflM1eRI1gvMekWzr2u7GAbkjIYSXPa+8BrGYmnPrFerftCNEJql0AqhhsnLRcY32PwquLdzpRVHckpdFCh1DO0mjDfVU/lZVV0MFfiU9D1gAeouoSr68bK1i8UptrOIW5D1jE3Fulf0G+OYLS3i5+V398eBOaMhZ32137hNac/jPzyHC6FZeVb4lVhk/WUfVo5KrFAVDKYmPMyU+GBZ8m6C3ayrpwRPefg0wnb3ksaLsf+Q0NrlVw/FPGDVeqOvLcjsK9zXV7sbfOdxn4sYPr9W/Tyi9e5EuxjSd/V9zAylrF2JP1V2/2u810JyJrPPTdOcFvrGvMl+0jyZHTdN8y2BV9KV62UlDemZzNrvgc8FvTMXywpSfha+Vz4U/N2fs9Xhg+NUKU1m7efivIDr+OvmFkAeEL4TXhXy3tONiziPNo5yEeZxr9zb2XAZDx7UCiIlk9lRHKsvar8UiRovQ5rMzuMzWu5+uoZCaNbKCzlXruPqVf6rveWEAk3cWm4LWKrKWZRaxBBKtcd9JrOzONE5SvdFVuUiPiyO97kNc4KvmX8mLEDtazI7aZrmrRCrasLn3AmjCeHzG+1zEhfGanvPPan9UiTiMhaCjHv/m8zabO44oeuyq1ufw4XQ/Ggyex0nKyV5XMyNN6yWfisgKLqMfShJVRkBVBODPKd9b0M1Rgqu4mc2jXtW/nMCVdCHEmLVSPhcGuO4RsLnHIV513NFIaO5jvPwNArl8t+dfGsluRCan5XVliP/Nhw3hYrFj2m9qJ0sYmW6h5vUTWYv4qp8rix27EMF5Biu4/0qvV6ek9nXTCtzyrv/j0mbjtKtejYKn0smjK6BRaTcud+OYRHPqnqX3O7ZyazNfc4SeCW7urP1qhCan4VquM8FbAcpN4CazN5mXK2oDUdO8r3xWew4VFjwepv5NrDUpTvpXQmLEl/TeDFbu4qnz9O18HB8rlKrGNfxFP50v4Po3jrkOjOOi7CaS1yY9xbEotFQxm+Bd598d8Lf2Y1ACM3twkPn54wnJlfxg1/uhDrPivX2IedlAq+DbeW7KFVOG56xhYMxXgmjO5V++Lwpr8NRFnH8O3ypb+Fz8VwPyyxdLr+DFAXULczxVuPYPT4/l8tFpBR3UdGdEEZ/MEY7l8+ugfwKQu7djSiE5m75BtHlB9BNluGgA6Jyld9n7ZkJeQ+E0V3IK3zelM/BuHbbDC3MF5/Gz4eqynStqp5VS/KzEHQ9VR2dvEUMz94bx5Wx8NuVPFvW5FMQ8mDmI4TmfuHB4mNGoUMdAfRKPuGgADp3+XzWBNB9MwneR+j53PZczfn+lH4QbfyPLbTx+UOQlYxVr+e/LM6wlTDf2xzHpOFTrHo2jmunTcc+8i0C2ZR+EL1V5iOE5mE5BZ0p9/PpS/rvjxYcpUj/syaAGtK6asrBKXcr76Ex3SDa+E+NQHpMIXjOfeGLcQmkx2Yccze93bdxFXcNlDM/TDeI3rroUAjN9tI+DK8Nn98l8DrGk14wsIjvi1CgJOGB5ENiDyOLuAVfD+gxrHtKPlUdvVT+lve0JsB6QOcgBNKP4r1DS59+CKzoT7jXn8ZA+tQ47o1xzG7Wi0VPVUcvrXYAvS92bphe29x7e0DfJIRmN+k1xr+K1U8ePpvvwcDbBL6QvC+lm8xexNX3sT9rl/Gzpi9eCta9YWsLmhYbVc91LIak0a7rUxz/HtRzEqq3NsMsFVz7uY5j4Ist+gwu3ANO4+KScby/6ziX/Wv5d/czDhHur2eVFobU1bImLD58HHnhYRHn4TtdcyE0uwsf+FUANZbruOKiyvamcPP5MNIX0iK+L3VXpdfCZ437hAfU1TbeEifCAqDx5gN7TXpJ1DqUfhS/K+youN0qrPoSwyqLr6Tjx1D6RKX0nYxjhrEOpP8otEJ6sbFzoN4FnPGKEPduhSuEZn/hi+35wKehC5+3NeyhBWU0+2c/Pms85MeQKddtvB4c77LuS9h3SyjjvwZhcWMVaP1SaTC9iLvKvsS/q5AkLz+O498qDaZvjuMrcwdGsW6ns5qH53hPXdyYh9txvbIuCnk+QC73KeZxe19/ITSHW/chet7TF1p925y71O/hYVcxENC3jM3PWh8HZFxt9Nn1WctdCC1XwdKqaiqlrbxXMXT+24PjDsL7uuoP3mXYUN7BMuwuVFquvjt+2fjPObcBWHz/jmma/8UH7Cv3OYoV5orH8a/f4vjNvUpzsTFv+CeO42vzBpL14yLRo40xmYrr+JcFnF30l8stYuXz+y7eByE03epmS+XmqvGl4Lkj3ayAXsf35i+VgNxrfQjVyZ4PF5ur3Z981ioQ7h+bodKj+Ev39XB6FT9nq4fGq/jQqLKiC+t2LI/2eA/da9hN+Lwd3XiQfrTxM8YKuVZz2NX3zGqO25jfwg0hoG42xusvG+N5zJBsNV9YxMXp5vvYNo4pxTqYvjkP72uxdxU0r8bVdZyHG1NdWLdj2bdv/+ZzeKfPRkJo+rd+MDi6I/hcfQG5kQ/t58nebUyyONz6e+C+iczV9wd0VWDctA6pV7Z5IF3fX1b/XaA5jvX7d9tcQDDHcNYP2jfts1hy8/vEdwwMYT2v3LRvUL2af665F8GPfr533nUv3bSe360YW+P48f27bb6zXjTvcx7TNM3/D7oqtF5HvaT4AAAAAElFTkSuQmCC";
+  var LOGO_W = 118, LOGO_H = 32;         // 1441x385 source, aspect preserved
+
+  // The export is always the light palette. The PNG is an artifact for documents
+  // and decks, and hlplot's logo raster is brand blue, which needs a light ground
+  // — there is no white variant in the package to swap in for a dark export.
+  function withLightTheme(fn) {
+    var prev = document.documentElement.dataset.theme;
+    document.documentElement.dataset.theme = "light";
+    try { return fn(); } finally { document.documentElement.dataset.theme = prev; }
+  }
+
+  // Plotly annotations do not wrap, so the source line has to arrive pre-broken.
+  // 0.52em is a serviceable mean advance width for Noto Sans at these sizes.
+  function wrapText(text, px, fontSize) {
+    var maxChars = Math.max(20, Math.floor(px / (fontSize * 0.52)));
+    var out = [], cur = "";
+    text.split(" ").forEach(function (w) {
+      if (!cur) { cur = w; }
+      else if ((cur + " " + w).length <= maxChars) { cur += " " + w; }
+      else { out.push(cur); cur = w; }
+    });
+    if (cur) out.push(cur);
+    return out.join("<br>");
+  }
+
+  // Title/subtitle above the plot, source line and logo below it. Annotations take
+  // xshift/yshift so they can be placed in pixels; layout.images cannot, so the
+  // logo is positioned in paper units computed from the margin box.
+  function brandLayout(lay, titleText, subText, sourceText) {
+    lay.margin = { t: 138, r: 28, b: 132, l: lay.margin.l };
+    lay.paper_bgcolor = "#ffffff";
+    lay.plot_bgcolor  = "#ffffff";
+    lay.width = EXPORT_W;
+    lay.height = EXPORT_H;
+    var plotW = EXPORT_W - lay.margin.l - lay.margin.r;
+    var plotH = EXPORT_H - lay.margin.t - lay.margin.b;
+
+    // theme_aurora() sets plot_title_position = "plot": the title hangs off the
+    // left edge of the image, not the left edge of the panel. x:0 with xref
+    // "paper" is the panel edge, which on the bar chart sits ~210px in behind the
+    // name gutter, so shift back out to a flat PAD from the image edge. The logo
+    // is right-anchored at the panel edge, which the right margin already puts
+    // at the same PAD, so the two ends line up.
+    var PAD = 28;
+    var edge = PAD - lay.margin.l;
+    var textW = EXPORT_W - PAD * 2;
+
+    lay.annotations = (lay.annotations || []).concat([
+      { text: "<b>" + titleText + "</b>",
+        xref: "paper", yref: "paper", x: 0, y: 1,
+        xanchor: "left", yanchor: "bottom", xshift: edge, yshift: 84,
+        showarrow: false, align: "left",
+        font: { family: FONT, size: 27, color: "#2D2D2D" } },
+      { text: wrapText(subText, textW, 16),
+        xref: "paper", yref: "paper", x: 0, y: 1,
+        xanchor: "left", yanchor: "bottom", xshift: edge, yshift: 22,
+        showarrow: false, align: "left",
+        font: { family: FONT, size: 16, color: "#424242" } },
+      { text: wrapText(sourceText, textW - LOGO_W - 28, 12),
+        xref: "paper", yref: "paper", x: 0, y: 0,
+        xanchor: "left", yanchor: "top", xshift: edge, yshift: -52,
+        showarrow: false, align: "left",
+        font: { family: FONT, size: 12, color: "#767676" } }
+    ]);
+
+    lay.images = [{
+      source: LOGO_PNG, xref: "paper", yref: "paper",
+      x: 1, y: -52 / plotH, xanchor: "right", yanchor: "top",
+      sizex: LOGO_W / plotW, sizey: LOGO_H / plotH,
+      sizing: "contain", layer: "above"
+    }];
+    return lay;
+  }
+
+  function downloadBrandedPng() {
+    var fig = withLightTheme(exportFigure);
+    Plotly.downloadImage(fig, {
+      format: "png", width: EXPORT_W, height: EXPORT_H, scale: 1,
+      filename: EXPORT_NAME()
+    });
+  }
+
+  var CAMERA_BUTTON = {
+    name: "downloadBrandedPng",
+    title: "Download plot as a PNG",
+    icon: Plotly.Icons.camera,
+    click: downloadBrandedPng
+  };
+
+  // Unlike the map, the bar chart builds its layout inside render() from live CSS
+  // variables, so the light-theme figure is obtained by re-running render() under
+  // the forced theme and then again to restore. Both calls are synchronous within
+  // one event handler, so the browser paints only the final state — no flicker.
+  function exportFigure() {
+    render();
+    var fig = JSON.parse(JSON.stringify(lastFig));
+    var h = headline();
+    return { data: fig.data,
+             layout: brandLayout(fig.layout, h.title, h.sub, SOURCE_TEXT()) };
+  }
+  function EXPORT_NAME() {
+    var mode = modeSel.value;
+    return "indeed-tightness-index-" + (measure === "3mo" ? "3-month-average" : META.fileTag) + "-" +
+      (mode === "state"
+        ? stateSel.value.toLowerCase()
+        : mode + "-" + nInput.value);
+  }
+
+  // ---- CSV export ----------------------------------------------------------
+  // The download is the full published set every time, not the current view: a
+  // file that silently contained only the top 15 would be a trap. Columns are
+  // limited to what already ships in the payload — raw posting and seeker counts
+  // are deliberately absent from it, so they cannot be exported either. The size
+  // flag is the 10k "large markets" cut, which the source line already discloses;
+  // the finer tiers are not exported because their thresholds are not published.
+  function csvCell(v) {
+    var s = String(v);
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  // Both measures go in every download, sorted by the one on screen; an area
+  // missing from one of the three months has blanks for the 3-month average.
+  function buildCsv() {
+    var keys = [measure].concat(Object.keys(META.measures).filter(function (k) { return k !== measure; }));
+    var head = ["cbsa_code", "cbsa_title", "states"];
+    keys.forEach(function (k) {
+      var t = k === "3mo" ? "3mo_avg" : META.fileTag.replace("-", "_");
+      head.push("rank_" + t, "tightness_index_" + t);
+    });
+    head.push("large_market");
+    var rows = [head.join(",")];
+    var R = META.measures[measure].rankField;
+    ALL.slice()
+      .sort(function (a, b) {
+        if (a[R] === null || b[R] === null) return (a[R] === null) - (b[R] === null);
+        return a[R] - b[R];
+      })
+      .forEach(function (m) {
+        var r = [m.code, csvCell(m.name), csvCell(m.states.join(";"))];
+        keys.forEach(function (k) {
+          var M = META.measures[k];
+          r.push(m[M.rankField] === null ? "" : m[M.rankField],
+                 m[M.field] === null ? "" : m[M.field].toFixed(1));
+        });
+        r.push(m.tier === "large" ? "TRUE" : "FALSE");
+        rows.push(r.join(","));
+      });
+    return rows.join("\r\n") + "\r\n";   // RFC 4180
+  }
+  document.getElementById("btn-csv").addEventListener("click", function () {
+    // The BOM is not optional: without it Excel decodes the file as ANSI and
+    // "Española, NM" and "Cañon City, CO" come back mojibake.
+    var blob = new Blob(["\ufeff" + buildCsv()], { type: "text/csv;charset=utf-8" });
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement("a");
+    a.href = url;
+    a.download = "indeed-labor-market-tightness-index-" + META.fileTag + ".csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  // The reserved copy heights depend on the width and on the webfont's metrics.
+  var lockTimer;
+  addEventListener("resize", function () { clearTimeout(lockTimer); lockTimer = setTimeout(lockCopyHeight, 150); });
+  if (document.fonts) document.fonts.ready.then(lockCopyHeight);
+
+  syncControls();
+  render();
+  renderTable();
+  postHeight();
+})();
+</script>
+</body>
+</html>
